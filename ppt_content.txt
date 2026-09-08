@@ -1,0 +1,191 @@
+﻿=== Public-Sector Drug & Medical Procurement Lifecycle.pptx ===
+--- Slide 1 ---
+A complete, layman-friendly guide to how drugs, medical equipment, IT services and civil works are procured ΓÇö from need identification to value delivered. | Government & Vendor | Procurement Lifecycle | India Public Sector Procurement
+
+--- Slide 2 ---
+Define detailed item specs, quality standards, and technical requirements for drugs & medical supplies | Technical Specifications | Prepare Bill of Quantities listing items, units, volumes and estimated costs for the procurement | BOQ & Scope of Work | Choose method: open tender, limited bid or direct procurement based on value and urgency | Procurement Strategy | Government Stage 2: Specifications & Strategy | Ginyard International Co.
+
+--- Slide 3 ---
+Draft NIT/RFP with scope, BOQ, eligibility criteria, EMD amount, timelines and evaluation method | Tender Document Creation | Publish on GeM, CPPP or state portal; notify via newspaper; open bidding window for vendors | NIT/RFP Publication | Hold pre-bid Q&A session; issue corrigenda to amend specs or dates; ensure all bidders receive updates | Pre-Bid Meeting & Corrigenda | Government Stage 3: Tender & Publication | India Public-Sector Procurement Lifecycle
+
+--- Slide 4 ---
+Bids are opened publicly on the scheduled date; names, EMD details and bid amounts are read aloud and recorded | Public Bid Opening | Vendors submit sealed bids (technical + financial) before the deadline via portal or physical drop box | Bid Submission Window | Each bid is logged in the register; late or incomplete submissions are rejected; valid bids move to evaluation | Bid Register & Compliance Check | Government Stage 4: Bid Receipt & Opening | Procurement Lifecycle ΓÇô Drugs & Medical Supplies
+
+--- Slide 5 ---
+Bids checked for eligibility, specs compliance, and mandatory documents before shortlisting | Technical Evaluation | Qualified bids opened; lowest price (L1) or quality-cost ratio (QCBS) determines the winner | Financial Bid & L1/QCBS | Evaluation committee submits report; competent authority grants approval to proceed to award | Approval & Recommendation | Government Stage 5 | Technical & Financial Evaluation
+
+--- Slide 6 ---
+Issue formal LOA to L1 bidder; vendor must acknowledge within stipulated time to confirm acceptance | Letter of Award (LOA) | Vendor submits PBG (typically 5ΓÇô10% of contract value) as security before contract is signed | Performance Bank Guarantee | Formal contract signed with scope, delivery schedule, SLA, LD clauses, and payment terms for drugs/medical supplies | Contract Execution | Government Stage 6: Award & Contract | India Public Sector Procurement Lifecycle
+
+--- Slide 7 ---
+Supplier dispatches drugs/equipment with challans, batch records and expiry details to the consignee store | Delivery & Dispatch | Equipment is installed on-site, calibrated and commissioned by vendor engineers per contract specifications | Installation & Commissioning | Nodal officer tracks milestones, flags delays, issues progress reports and enforces LD clauses if timelines slip | Progress Monitoring | Government Stage 7: Execution & Monitoring | India Public-Sector Procurement Lifecycle
+
+--- Slide 8 ---
+Goods/services are physically inspected, quality-tested and verified against specifications before acceptance | Inspection & Testing | Acceptance certificate issued after successful inspection; discrepancies trigger rejection or short-supply notices | Acceptance & Documentation | Vendor submits invoice with proof of delivery; government verifies, processes payment and releases dues per contract terms | Invoice Verification & Payment | Government Stage 8: Inspection & Payment | India Public-Sector Procurement Lifecycle
+
+--- Slide 9 ---
+Monitor warranty obligations, enforce AMC terms, and track SLA compliance for drugs, equipment, and services | Warranty & AMC/SLA | Apply LD clauses for delays or non-performance; deduct from dues or invoke performance bank guarantee | Liquidated Damages (LD) | Issue completion certificate, release retention money, conduct internal and statutory audit, archive all records | Contract Closure & Audit | Government Stage 9 | Warranty, AMC/SLA, LD, Closure & Audit
+
+--- Slide 10 ---
+Find tender on GeM/eProcurement portal ΓåÆ Bid/No-bid decision ΓåÆ Study NIT/RFP ΓåÆ Check eligibility criteria & compliance matrix | Stage 1ΓÇô2: Opportunity & Tender Analysis | Attend pre-bid meeting ΓåÆ Seek clarifications ΓåÆ Review corrigenda ΓåÆ Prepare technical & financial bids ΓåÆ Submit EMD/bid security before deadline | Stage 3ΓÇô4: Pre-Bid & Submission | Technical & financial evaluation ΓåÆ L1/QCBS outcome ΓåÆ LOA & contract signing ΓåÆ PBG submission ΓåÆ Execute supply/work ΓåÆ Invoice, payment, warranty/AMC & audit closure | Stage 5ΓÇô8: Evaluation, Award & Closure | Full Diagram 2: Vendor End-to-End Lifecycle | Vendor/Bidder Lifecycle
+
+--- Slide 11 ---
+Check turnover, experience, certifications and registration requirements before deciding to invest time in bidding | Assess Eligibility | Monitor government portals (GeM, CPPP, state e-procurement) for new tenders matching your product or service category | Find the Opportunity | Evaluate competition, margins, capacity and risk. Commit only if you meet all criteria and the opportunity is commercially viable | Bid / No-Bid Decision | Vendor Stage 1: Find Opportunity & Bid/No-Bid Decision | Ginyard International Co.
+
+--- Slide 12 ---
+Rules, tenders, and evaluations ensure the right supplier is chosen at the best price ΓÇö protecting public money. | The Process | A hospital runs out of medicines. Patients are waiting. The government must act ΓÇö but how does it buy fairly and transparently? | The Need | Medicines reach patients on time, at fair cost, with quality assured ΓÇö procurement delivers real public value. | The Outcome | Why Procurement Matters | Government of India ΓÇô Public Procurement
+
+--- Slide 13 ---
+Study NIT/RFP scope, BOQ, specifications, timelines, and all terms before proceeding | Read the Tender Document | Verify turnover, experience, certifications, and blacklisting clauses to confirm you qualify | Check Eligibility Criteria | Map every tender requirement to your response, flagging gaps and deviations early | Build Compliance Matrix | Vendor Stage 2: Understand the Tender | Eligibility & Compliance Matrix
+
+--- Slide 14 ---
+Raise formal written queries on specifications, eligibility criteria, BOQ items or commercial terms within the deadline set in the NIT/RFP | Submit Written Clarifications | Vendors attend the government-hosted pre-bid conference to understand tender scope, ask questions and flag ambiguities before submission | Attend Pre-Bid Meeting | Monitor the portal for official amendments (corrigenda). Update bid documents, pricing and compliance matrix to reflect all changes before final submission | Track & Incorporate Corrigenda | Vendor Stage 3: Pre-Bid, Clarifications & Corrigenda | Ginyard International | Co.
+
+--- Slide 15 ---
+Quote item-wise prices in BOQ format; keep financial envelope strictly sealed and separate from technical bid | Financial Bid | Submit Earnest Money Deposit via DD or bank guarantee; non-submission leads to outright rejection of bid | EMD / Bid Security | Upload or submit sealed bids before deadline; confirm acknowledgement receipt and check portal submission status | Bid Submission | Vendor Stage 4 | Prepare technical documents: company profile, eligibility proofs, specifications compliance, certifications and quality standards | Technical Bid | Ginyard International Co.
+
+--- Slide 16 ---
+Government checks your documents, certifications, past experience and product samples against eligibility criteria | Technical Evaluation | Price bids of technically qualified vendors are opened; L1 (lowest price) or QCBS scoring determines the winner | Financial Evaluation | Successful vendor receives Letter of Award (LOA); unsuccessful vendors are notified and may request a debrief | Award Outcome | Vendor Stage 5: Evaluation & Award | Ginyard International Co.
+
+--- Slide 17 ---
+Review and sign the formal contract agreement with the procuring government entity | Contract Signing | Submit performance bank guarantee (PBG) as required before work or supply begins | Performance Security | Deploy resources, staff and supply chain to begin execution as per contract timelines | Mobilisation & Readiness | Vendor Stage 6: Contract & Mobilisation | Drugs & Medical Procurement
+
+--- Slide 18 ---
+Deliver goods, works, or services as per contract schedule, quantity, and quality specifications | Supply & Delivery | Install equipment or complete works on-site; conduct testing, trial runs, and handover training | Installation & Commissioning | Obtain formal acceptance certificate from government after inspection confirms all deliverables meet agreed standards | Acceptance & Sign-Off | Vendor Stage 7: Execution & Acceptance | Ginyard International Co.
+
+--- Slide 19 ---
+Government verifies invoice, deducts LD or penalties if applicable, and releases payment within agreed credit period per contract terms | Payment Processing | Vendor fulfils warranty obligations, provides AMC services or meets SLA targets; performance tracked and penalties applied for shortfalls | Warranty / AMC / SLA | Final reconciliation, release of performance bank guarantee, no-dues certificate issued and contract formally closed with audit trail | Contract Closure | Vendor Stage 8 | Vendor raises invoice after accepted delivery or milestone completion, attaching proof of work, inspection certificates and delivery challans | Billing & Invoicing | Ginyard International Co.
+
+--- Slide 20 ---
+Government: Evaluation & Award | Opens bids, evaluates technical and financial offers, applies L1/QCBS, issues LOA and signs contract | Government: Planning & Tendering | Defines needs, prepares BOQ/specs, publishes NIT/RFP, issues corrigenda and manages pre-bid queries | Vendor: Execution & Closure | Submits PBG, mobilises resources, delivers goods/services, raises invoices and fulfils AMC/SLA/warranty | Vendor: Opportunity & Bid Prep | Scans portals, makes bid/no-bid decision, studies tender, prepares compliance matrix and attends pre-bid | Government vs Vendor | Ginyard International Co.
+
+--- Slide 21 ---
+Government publishes NIT/RFP; Vendor reviews documents, raises clarifications; Government issues corrigenda and responds to all queries. | Tender Publication & Pre-Bid | Vendor submits technical & financial bid with EMD; Government opens bids, evaluates L1/QCBS, seeks clarifications, and communicates award outcome. | Bid Submission & Evaluation | Government issues LOA & contract; Vendor submits PBG and mobilises; both parties monitor delivery, inspections, billing, payments, SLA/AMC and final audit closure. | Contract, Execution & Closure | Interaction Swimlane: Gov Γåö Vendor | Ginyard International Co.
+
+--- Slide 22 ---
+NABL-accredited lab testing, batch number verification, pharmacopoeia standards compliance | Quality & Batch Checks | Minimum shelf life mandated at delivery, FEFO rotation enforced, cold chain for vaccines | Expiry & Storage Control | Inspection certificate issued, invoice processed, LD applied for short supply or quality failure | Billing, AMC & Closure | Drugs & Consumables | Indent raised by hospital/store, approved by CMO, linked to patient load and formulary list | Procurement & Indent | Ginyard International Co.
+
+--- Slide 23 ---
+Identify need, budget approval, define specs, and publish tender (NIT/RFP) | Planning & Initiation | Receive bids, evaluate technically & financially, select vendor (L1/QCBS) | Bidding & Evaluation | Issue LOA, sign contract, deliver goods/services, inspect, pay and audit | Award, Execution & Closure | The Big Picture: Master Procurement Lifecycle | Ginyard International Co.
+
+--- Slide 24 ---
+Equipment | Procurement Lifecycle | Government defines detailed technical specs; shortlisted vendors demonstrate equipment and undergo pre-delivery inspection before order is placed | Specification & Demo/Inspection | Delivery & Installation | Vendor commissions equipment, runs performance tests and hands over to government with user training, manuals and acceptance certificate | Warranty period covers defect-free operation; after expiry an Annual Maintenance Contract (AMC) ensures ongoing uptime, spares and service support | Commissioning | Warranty / AMC | Equipment is delivered to site, unpacked and verified against purchase order; engineers complete physical installation and civil/electrical readiness checks | Ginyard International Co.
+
+--- Slide 25 ---
+IT Services | Procurement Lifecycle | Detailed RFP and Statement of Work issued; vendors evaluated on technical capability, past performance, and financial bid using QCBS or L1 criteria. | RFP / SOW & Evaluation | SLA / KPI Definition | Project milestones tracked against timelines; deliverables tested and formally accepted by the government after user acceptance testing (UAT). | Post-go-live support, AMC, helpdesk services, and periodic SLA reviews; contract closed after warranty period and final audit sign-off. | Milestones & Acceptance | Ongoing Support & Closure | Service Level Agreements and Key Performance Indicators defined in the contract; uptime, response time, resolution time, and penalty clauses agreed upon. | Ginyard International Co.
+
+--- Slide 26 ---
+Civil Works | Procurement Lifecycle | Administrative & technical approvals obtained; detailed BOQ and scope of work prepared with cost estimates | Approvals & BOQ | Tender & Work Order | Site work executed with engineer supervision; running account bills raised at milestones for progressive payments | Final inspection, completion certificate issued; defect liability period monitored before final payment & closure | Execution & RA Bills | Completion & Defect Liability | NIT published, bids evaluated on L1 or QCBS basis, LOA issued and formal work order signed with contractor | Ginyard International Co.
+
+--- Slide 27 ---
+Financial Bid & L1 Gate | Unrealistic pricing leads to poor delivery; Vendors must cost accurately; Government must check abnormally low bids before award | Tender Eligibility Gate | Vendors fail due to missing documents or turnover shortfalls; Government must set clear, proportionate criteria upfront | Contract & PBG Gate | Delays in PBG submission or contract signing stall execution; both sides must track deadlines and escalate early | Technical Evaluation Gate | Vague specifications cause rejections; Government must publish detailed BOQ/specs; Vendors must map compliance item by item | Common Decision Gates, Failure Points & How to Avoid Them | 02. | 03. | 01. | 04. | Ginyard International | Co.
+
+--- Slide 28 ---
+Need identification, budget approval, specifications, BOQ drafting, procurement strategy and NIT/RFP preparation | Before Tender | Tender publication, pre-bid meeting, corrigenda, bid receipt, opening, technical & financial evaluation, L1/QCBS and award | During Tender | LOA issue, contract signing, PBG submission, execution, inspection, payment, warranty/AMC/SLA and audit closure | After Tender | End-to-End Tender Checklist | Ginyard International Co.
+
+--- Slide 29 ---
+One-Page Quick Reference | Find ΓåÆ Bid ΓåÆ Submit ΓåÆ Evaluate ΓåÆ Contract ΓåÆ Execute ΓåÆ Bill ΓåÆ Close | Vendor Lifecycle | NIT/RFP ΓåÆ Pre-bid Q&A ΓåÆ Bid Opening ΓåÆ LOA ΓåÆ Contract ΓåÆ Inspection ΓåÆ Payment ΓåÆ Closure | Interaction Map | Need ΓåÆ Plan ΓåÆ Specify ΓåÆ Tender ΓåÆ Evaluate ΓåÆ Award ΓåÆ Monitor ΓåÆ Pay ΓåÆ Audit | Government Lifecycle | Ginyard International Co.
+
+--- Slide 30 ---
+From identifying a need to delivering value ΓÇö every stage, every document, and every decision connects government and vendor in a shared commitment to quality, transparency, and impact. | Procurement Is a | Controlled Journey | Ginyard International Co.
+
+--- Slide 31 ---
+Medical devices, diagnostic machines and surgical tools requiring demo, inspection, installation and commissioning | Equipment | Software, hardware, hospital management systems and digital platforms governed by RFP, SLA and milestone-based payments | IT Services | Construction, renovation and infrastructure projects managed through BOQ, work orders, RA bills and defect liability periods | Civil Works | Procurement in Four Categories | Medicines, syringes, IV fluids, bandages and lab reagents procured in bulk with strict batch, quality and expiry controls | Drugs & Consumables | Ginyard International | Co.
+
+--- Slide 32 ---
+Refundable security deposit submitted with a bid to prove the vendor is serious and will honour the offer if selected | EMD ΓÇô Earnest Money Deposit | Detailed document outlining requirements, evaluation criteria and terms, used when quality and approach matter alongside price | RFP ΓÇô Request for Proposal | Bank guarantee submitted by the winning vendor after award, ensuring they will fulfil contract obligations or face financial penalty | PBG ΓÇô Performance Bank Guarantee | Official public notice issued by the government inviting eligible vendors to submit bids for a procurement | NIT ΓÇô Notice Inviting Tender | Key Terms Made Simple | India Public Sector Procurement
+
+--- Slide 33 ---
+Quality & Cost Based Selection: Bids scored on both technical quality and price; balances best value over pure lowest cost | QCBS | Lowest Bidder (L1): The vendor quoting the lowest price in a tender; typically wins in price-based procurement if technically qualified | L1 | Letter of Award: Official communication from the government to the selected vendor confirming the contract award decision | LOA | Bill of Quantities: A detailed list of items, materials, and quantities needed, used to price civil works or supply contracts accurately | BOQ | Key Terms Made Simple (Part 2) | India Public Sector Procurement
+
+--- Slide 34 ---
+Key Terms | Made Simple | Annual Maintenance Contract: yearly agreement for upkeep, servicing and repair of equipment or systems post-warranty | AMC | Liquidated Damages: pre-agreed financial penalty deducted from vendor payment for delays or failure to meet contract terms | LD | Service Level Agreement: defines measurable performance standards a vendor must meet for services like IT or maintenance | SLA | Ginyard International Co.
+
+--- Slide 35 ---
+Need identification ΓåÆ Budget approval ΓåÆ Specifications & BOQ ΓåÆ Procurement strategy ΓåÆ NIT/RFP drafting ΓåÆ Pre-bid meeting ΓåÆ Corrigenda issued | Stage 1ΓÇô3: Plan & Tender | Bid receipt & opening ΓåÆ Technical evaluation ΓåÆ Financial evaluation (L1/QCBS) ΓåÆ Approval ΓåÆ LOA issued ΓåÆ Performance security ΓåÆ Contract signing | Stage 4ΓÇô6: Evaluate & Award | Delivery/installation/work ΓåÆ Monitoring ΓåÆ Inspection & testing ΓåÆ Acceptance ΓåÆ Invoice & payment ΓåÆ Warranty/AMC/SLA ΓåÆ LD if applicable ΓåÆ Closure & audit | Stage 7ΓÇô9: Execute & Close | Government Lifecycle | Full Diagram | Procuring Entity: End-to-End
+
+--- Slide 36 ---
+Departments assess stock levels, patient load, disease burden and gap analysis to determine what drugs, consumables or equipment are required. | Need Identification | A detailed procurement plan is prepared listing items, quantities, timelines and responsible officers, aligned with the financial year calendar. | Annual Procurement Planning | Funds are earmarked under the relevant budget head. Administrative and financial sanction is obtained before initiating any tender process. | Budget Approval & Allocation | Government Stage 1: Need Identification | India Public-Sector Procurement Lifecycle
+
+=== Public_Procurement_Lifecycle_India_Govt_Vendor.pptx ===
+--- Slide 1 ---
+INDIA  |  Public Sector Procurement | Public Procurement | Life Cycle in India | Government  Γåö  Vendor Perspectives | A visual guide for every stakeholder | Government View | Vendor / Bidder View | Plan | Tender | Evaluate | Award | Execute | Close | Four Procurement Categories Covered | Rx | Drugs & Consumables | L1 + batch quality testing | Eq | Medical Equipment | SITC + CAMC uptime SLA | IT | I.T. Services | QCBS milestone delivery | CW | Civil Works | MB ΓåÆ RA Bill ΓåÆ DLP | What you'll learn in this presentation | Regulatory framework  ΓÇó  Digital portals  ΓÇó  Lifecycle diagrams  ΓÇó  Sector deep-dives  ΓÇó  Dispute resolution | High-visualization instructional presentation  |  Layman-friendly
+
+--- Slide 2 ---
+Diagram A: Government Procurement Life Cycle | India Public Sector Procurement | Seven-step buyer journey from planning and sanction to closure and defect liability period. | Public Procurement Life Cycle | India
+
+--- Slide 3 ---
+Diagram B: Vendor / Bidder Life Cycle | India Public Sector Procurement | Seven-step vendor journey from opportunity discovery to DLP servicing and PBG release. | Public Procurement Life Cycle | India
+
+--- Slide 4 ---
+Universal Procurement Swimlane Matrix | India Public Sector Procurement | Parallel Government and Vendor actions across all six procurement phases. | Public Procurement Life Cycle | India
+
+--- Slide 5 ---
+Interaction Swimlane: Government Γåö Vendor | India Public Sector Procurement | Public Procurement Life Cycle | India
+
+--- Slide 6 ---
+Drugs & Consumables: Sector Lifecycle | India Public Sector Procurement | EDL-based tendering, batch quarantine, NABL/CDL testing, HMIS release or NSQ recall and blacklisting. | Public Procurement Life Cycle | India
+
+--- Slide 7 ---
+Drugs & Consumables: Key Risks | India Public Sector Procurement | Government risk management | State Therapeutic Committee finalizes Essential Drugs List before annual rate contract tenders. | Every batch quarantined; random samples sent to NABL/CDL labs. | NSQ batches blocked statewide; security forfeited; repeat failures cause 3-year blacklisting. | Vendor risk: 75%+ shelf life required; cold-chain liability; recall and destruction at own cost if NSQ. | Public Procurement Life Cycle | India
+
+--- Slide 8 ---
+Medical Equipment: Sector Lifecycle | India Public Sector Procurement | SITC model with withheld commissioning payment, CAMC uptime SLAs and penalty deductions. | Public Procurement Life Cycle | India
+
+--- Slide 9 ---
+Medical Equipment: TCO and CAMC | India Public Sector Procurement | Total Cost of Ownership focus | 20-30% payment withheld until installation, testing and commissioning sign-off. | CAMC for 3-7 years with 95% uptime SLA; 24-48 hour repair windows. | Vendor must manage site readiness, spare parts inventory and long-term service cost forecasting. | Public Procurement Life Cycle | India
+
+--- Slide 10 ---
+I.T. Services: Sector Lifecycle | India Public Sector Procurement | QCBS evaluation, milestone-based payments and strict change-management against scope creep. | Public Procurement Life Cycle | India
+
+--- Slide 11 ---
+I.T. Services: QCBS and Scope Control | India Public Sector Procurement | Quality and Cost-Based Selection | Technical bid scored out of 100; final award uses 70:30 or 80:20 quality-to-cost ratio. | Payments tied to SRS, Beta, UAT, Go-Live and O&M milestones. | Vendors must document all out-of-scope requests as paid variation orders. | Public Procurement Life Cycle | India
+
+--- Slide 12 ---
+Why Public Procurement Matters | India Public Sector Procurement | N | The Need | Government must buy medicines, equipment, IT systems and infrastructure fairly, transparently, and at best value for public money. | P | The Process | Rules, tenders, evaluations and contracts ensure the right supplier is chosen through GFR, CVC and digital portals. | O | The Outcome | Quality goods and services reach citizens on time with auditability, compliance and accountability. | Public Procurement Life Cycle | India
+
+--- Slide 13 ---
+Civil Works: Sector Lifecycle | India Public Sector Procurement | SoR-based estimates, Measurement Book as legal payment basis, RA bills and Defect Liability Period. | Public Procurement Life Cycle | India
+
+--- Slide 14 ---
+Civil Works: MB, RA Bills and DLP | India Public Sector Procurement | CPWD/PWD governed construction procurement | Administrative Approval and Technical Sanction before tender publication. | Measurement Book: joint site measurement ΓÇö no payment without MB entry. | RA Bill (Form 26): cumulative work value minus prior payments, taxes, advances and retention. | DLP: 12 months (buildings) to 5 years (critical structures); contractor rectifies at own cost. | Public Procurement Life Cycle | India
+
+--- Slide 15 ---
+Sector Comparison Matrix | India Public Sector Procurement | Sector | Core Evaluation | Payment Trigger | Apex Vendor Risk | Drugs & Consumables | L1 on EDL | NABL/CDL clean batch report | NSQ batch -> blacklisting | Medical Equipment | Tech + L1 TCO + CAMC | SITC commissioning sign-off | Site unreadiness delays payment | I.T. Services | QCBS (70:30) | SRS, Beta, UAT, Go-Live milestones | Unmanaged scope creep | Civil Works | BoQ rates -> L1 | MB -> RA Bill | MB/RA bill delays -> cash crunch | Public Procurement Life Cycle | India
+
+--- Slide 16 ---
+Financial Security: SFMS and e-BG | India Public Sector Procurement | From paper bank guarantees to SFMS IFN 760 messaging and NeSL electronic bank guarantees. | Public Procurement Life Cycle | India
+
+--- Slide 17 ---
+SFMS and e-BG: Vendor Advantage | India Public Sector Procurement | Digital financial security revolution | Paper BGs were prone to forgery and manual tracking burden. | SFMS: banks advise issuance via IFN 760/760COV ΓÇö government verifies before accepting. | e-BG via NeSL: digital stamp duty, Aadhaar e-Sign/DSC, cloud repository with expiry alerts. | Vendors gain faster compliance, quicker contract activation and improved liquidity. | Public Procurement Life Cycle | India
+
+--- Slide 18 ---
+Dispute Resolution: Vivad se Vishwas II | India Public Sector Procurement | One-time settlement for legacy contractual disputes (2023) | Applies to monetary claims where GoI, CPSEs or PSBs are parties. | Arbitral awards (on/before 31 Jan 2023): 65% settlement offer. | Court decrees (on/before 30 Apr 2023): 85% settlement offer. | Government: clears litigation backlog, caps post-award interest at 9% simple. | Vendor: accepts haircut for immediate liquidity instead of decade-long appeals. | Claims up to INR 500 Crore: government must accept if vendor opts in. | Public Procurement Life Cycle | India
+
+--- Slide 19 ---
+One-Page Quick Reference | India Public Sector Procurement | Government Lifecycle | 1.  Need | 2.  Plan | 3.  Specify | 4.  Tender | 5.  Evaluate | 6.  Award | 7.  Monitor | 8.  Pay | 9.  Close | Start  ΓåÆ  End | Vendor Lifecycle | 1.  Find | 2.  Bid | 3.  Submit | 4.  Evaluate | 5.  Contract | 6.  Execute | 7.  Bill | 8.  DLP | 9.  Close | Start  ΓåÆ  End | Interaction Map | 1.  NIT/RFP | 2.  Pre-bid Q&A | 3.  Bid Opening | 4.  LOA | 5.  Contract | 6.  Inspection | 7.  Payment | 8.  Closure | Start  ΓåÆ  End | Public Procurement Life Cycle | India
+
+--- Slide 20 ---
+Key Takeaways | India Public Sector Procurement | What every layman should remember | Public procurement is a regulated, transparent lifecycle ΓÇö not a single purchase event. | Government ensures value, compliance and quality; vendors must prepare, bid and deliver with discipline. | Drugs need lab testing; equipment needs SITC/CAMC; IT needs QCBS milestones; civil works need MB-based billing. | Digital tools (CPPP, GeM, DSC, SFMS, e-BG) make the process faster, fairer and more auditable. | Understanding both perspectives is essential for successful public procurement outcomes. | Thank you | Public Procurement Life Cycle | India
+
+--- Slide 21 ---
+The Big Picture: Master Procurement Lifecycle | India Public Sector Procurement | From planning and sanction through publication, evaluation, award, execution and closure. | Public Procurement Life Cycle | India
+
+--- Slide 22 ---
+Procurement in Four Categories | India Public Sector Procurement | Each sector follows the universal lifecycle but with distinct evaluation, payment and risk controls. | Public Procurement Life Cycle | India
+
+--- Slide 23 ---
+Statutory & Regulatory Architecture | India Public Sector Procurement | GFR 2017, CVC Guidelines and MSE Policy together govern how procurement must be conducted. | Public Procurement Life Cycle | India
+
+--- Slide 24 ---
+GFR 2017 and CVC Guidelines | India Public Sector Procurement | Dual pillars of Indian public procurement | GFR 2017: procedural rulebook for central ministries ΓÇö thresholds from direct purchase (up to INR 50,000) to open tendering and e-reverse auction. | Rule 144: no brand favoritism, fair treatment, economy and transparency. | CVC Guidelines: vigilance oversight, wide publicity, no post-bid eligibility changes. | Negotiation only with L1 if price unreasonably high; L2/L3 only if L1 withdraws. | Integrity Pact mandatory for contracts exceeding INR 1 Crore; CVC penalizes tender splitting. | Public Procurement Life Cycle | India
+
+--- Slide 25 ---
+MSE Policy: Vendor Advantages | India Public Sector Procurement | Micro & Small Enterprises (MSEs) receive strategic benefits under the Public Procurement Policy Order, 2012 | EMD | EMD Exemption | No 2-5% earnest money deposit ΓÇö frees working capital for multiple bids. | FEE | Tender Fee Waivers | Zero fees for downloading tender documents on central portals. | L1 | L1 + 15% Price Match | MSE within 15% of L1 can match price and win up to 25% quantity. | PAY | 45-Day Payment Rule | Government must pay within 45 days or face 3x RBI rate interest penalty. | 25% annual procurement target from MSEs  |  4% SC/ST-owned  |  3% women-owned MSEs | Public Procurement Life Cycle | India
+
+--- Slide 26 ---
+Digital Procurement Ecosystem | India Public Sector Procurement | CPPP, state portals, GeM, Class 3 DSC encryption and SFMS/e-BG verification. | Public Procurement Life Cycle | India
+
+--- Slide 27 ---
+CPPP, State Portals and GeM | India Public Sector Procurement | Digital platforms powering modern procurement | CPPP (eprocure.gov.in): mandatory for central tenders above INR 25 lakh ΓÇö e-publishing and GePNIC e-bidding. | State portals (e.g. eproc.cgstate.gov.in): localized works, goods and consultancy contracts. | Class 3 DSC on USB token encrypts Cover 1 and Cover 2 bids in an electronic lockbox until opening time. | GeM (GFR Rule 149): mandatory for common-use goods ΓÇö Direct Purchase, L1 Purchase, Custom Bid / Reverse Auction. | Public Procurement Life Cycle | India
+

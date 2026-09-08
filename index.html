@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MP Health Procurement Solution — Prototype</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="css/main.css?v=20260908f">
+  <link rel="stylesheet" href="css/landing.css?v=20260908f">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
+</head>
+<body>
+
+  <!-- ==================== AUTH PAGE ==================== -->
+  <div class="auth-page" id="authPage"></div>
+
+  <!-- ==================== MAIN APP ==================== -->
+  <div class="app" id="app">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-icon"><i class="fa-solid fa-hospital"></i></div>
+        <div>
+          <h2>MP Health Procurement</h2>
+          <span id="sidebarBrandSub">Resource Manager</span>
+        </div>
+      </div>
+      <nav class="sidebar-nav" id="sidebarNav"></nav>
+      <div class="sidebar-footer">
+        <button class="btn-logout" onclick="confirmLogout()"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <header class="topbar">
+        <div class="topbar-row">
+          <div class="topbar-context">
+            <button class="btn-back hidden" id="btnBack" onclick="goBack()" title="Go back" aria-label="Go back">
+              <i class="fa-solid fa-arrow-left"></i>
+              <span class="btn-back-label">Back</span>
+            </button>
+            <nav class="breadcrumb" id="breadcrumb" aria-label="Breadcrumb"></nav>
+          </div>
+          <div class="topbar-actions">
+            <button class="alert-btn" onclick="toggleAlertPanel()" title="Notifications">
+              <i class="fa-solid fa-bell"></i>
+              <span class="sup-badge" id="alertBadge">7</span>
+            </button>
+            <div class="user-chip">
+              <div class="user-avatar" id="userAvatar">RM</div>
+              <span id="userName">Resource Manager</span>
+            </div>
+          </div>
+        </div>
+        <div class="topbar-heading">
+          <div class="page-heading">
+            <h1 id="pageTitle">Analytics Dashboard</h1>
+            <p id="pageSubtitle">Real-time procurement insights &amp; KPIs</p>
+          </div>
+          <div class="page-meta" id="pageMeta"></div>
+        </div>
+      </header>
+
+      <div id="categoryBarSlot" class="category-bar-slot hidden" aria-hidden="true"></div>
+      <main class="page-content" id="pageContent"></main>
+    </div>
+
+    <!-- Alert Panel -->
+    <div class="alert-panel" id="alertPanel">
+      <div class="alert-panel-header">
+        <h3><i class="fa-solid fa-bell"></i> Notifications <span class="sup-badge sm" id="alertPanelBadge"></span></h3>
+        <button class="modal-close" onclick="closeAlertPanel()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="alert-list" id="alertList"></div>
+    </div>
+  </div>
+
+  <!-- Government Notices Modal (shown on website / login page load) -->
+  <div class="notice-overlay" id="noticeOverlay" aria-hidden="true">
+    <div class="notice-modal" role="dialog" aria-modal="true" aria-labelledby="noticeModalTitle">
+      <div class="notice-modal-header">
+        <div class="notice-modal-brand">
+          <div class="notice-modal-icon"><i class="fa-solid fa-bullhorn"></i></div>
+          <div>
+            <p class="notice-modal-eyebrow">Government of Madhya Pradesh</p>
+            <h2 id="noticeModalTitle">Official Notices</h2>
+          </div>
+        </div>
+        <button type="button" class="modal-close" onclick="closeNoticeModal()" aria-label="Close notices"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="notice-modal-body" id="noticeModalBody"></div>
+      <div class="notice-modal-footer">
+        <button type="button" class="btn btn-outline" id="noticeAckAllBtn" onclick="acknowledgeAllNotices()">Acknowledge All</button>
+        <button type="button" class="btn btn-primary" id="noticeContinueBtn" onclick="closeNoticeModal()">Continue to Sign In</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Drill-Down Modal -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-header-left">
+          <button type="button" class="modal-back hidden" id="modalBackBtn" onclick="modalGoBack()" title="Go back" aria-label="Go back">
+            <i class="fa-solid fa-arrow-left"></i>
+            <span>Back</span>
+          </button>
+          <h2 id="modalTitle">Details</h2>
+        </div>
+        <button class="modal-close" onclick="closeModal()" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+    </div>
+  </div>
+
+  <script src="js/data.js?v=20260908f"></script>
+  <script src="js/dropdown.js?v=20260908f"></script>
+  <script src="js/charts.js?v=20260908f"></script>
+  <script src="js/auth.js?v=20260908f"></script>
+  <script src="js/app.js?v=20260908f"></script>
+  <script src="js/contract-vendor-mgmt.js?v=20260908f"></script>
+</body>
+</html>

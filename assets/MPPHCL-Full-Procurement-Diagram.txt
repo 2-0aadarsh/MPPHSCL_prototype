@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MPPHCL Full Procurement Diagram — Gov ↔ Bidder Overlap &amp; Data Sources</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --navy: #003D5D;
+      --navy-deep: #002a40;
+      --teal: #0d7377;
+      --amber: #c45c26;
+      --gold: #b8860b;
+      --slate: #334155;
+      --muted: #64748b;
+      --line: #d6e0ea;
+      --gov: #0b5f8a;
+      --gov-bg: #e8f4fb;
+      --bid: #9a3412;
+      --bid-bg: #fff4ed;
+      --overlap: #5b2d6e;
+      --overlap-bg: #f3e8ff;
+      --dvdms: #0f766e;
+      --nic: #1d4ed8;
+      --eoffice: #7c3aed;
+      --manual: #b45309;
+      --paper: #f4f7fa;
+      --card: #ffffff;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'DM Sans', system-ui, sans-serif;
+      color: var(--slate);
+      background:
+        radial-gradient(ellipse 80% 50% at 10% -10%, rgba(13, 115, 119, 0.12), transparent 55%),
+        radial-gradient(ellipse 60% 40% at 100% 0%, rgba(0, 61, 93, 0.1), transparent 50%),
+        linear-gradient(180deg, #eef3f7 0%, var(--paper) 40%, #e8eef4 100%);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    .wrap { max-width: 1280px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+
+    header {
+      display: grid;
+      gap: 1rem;
+      margin-bottom: 1.75rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 2px solid var(--navy);
+    }
+    .brand-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+    h1 {
+      font-family: 'Fraunces', Georgia, serif;
+      font-size: clamp(1.55rem, 3vw, 2.15rem);
+      color: var(--navy);
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+    }
+    .subtitle { color: var(--muted); font-size: 0.95rem; max-width: 52rem; margin-top: 0.4rem; }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      font-size: 0.78rem;
+    }
+    .meta span {
+      background: #fff;
+      border: 1px solid var(--line);
+      padding: 0.3rem 0.65rem;
+      border-radius: 999px;
+      color: var(--navy);
+      font-weight: 600;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+      align-items: center;
+      margin-bottom: 1.25rem;
+    }
+    .toolbar button, .toolbar a.btn {
+      font: inherit;
+      font-size: 0.85rem;
+      font-weight: 600;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--navy);
+      padding: 0.45rem 0.85rem;
+      border-radius: 8px;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .toolbar button:hover, .toolbar a.btn:hover { border-color: var(--navy); background: var(--gov-bg); }
+    .toolbar .primary { background: var(--navy); color: #fff; border-color: var(--navy); }
+    .toolbar .primary:hover { background: var(--navy-deep); }
+
+    /* Software strip */
+    .soft-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+    @media (max-width: 900px) { .soft-strip { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 520px) { .soft-strip { grid-template-columns: 1fr; } }
+    .soft-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 0.9rem 1rem;
+      box-shadow: 0 1px 0 rgba(0, 61, 93, 0.04);
+    }
+    .soft-card .tag {
+      display: inline-block;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #fff;
+      background: var(--navy);
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      margin-bottom: 0.35rem;
+    }
+    .soft-card h3 { font-size: 0.95rem; color: var(--navy-deep); margin-bottom: 0.25rem; }
+    .soft-card p { font-size: 0.8rem; color: var(--muted); }
+    .soft-card.i-mcs { border-top: 3px solid var(--navy); }
+    .soft-card.dvdms { border-top: 3px solid var(--dvdms); }
+    .soft-card.emms { border-top: 3px solid var(--amber); }
+    .soft-card.eaush { border-top: 3px solid var(--teal); }
+
+    /* Legend */
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.65rem 1.1rem;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 0.85rem 1.1rem;
+      margin-bottom: 1.25rem;
+      font-size: 0.82rem;
+    }
+    .legend-item { display: flex; align-items: center; gap: 0.45rem; font-weight: 600; }
+    .swatch {
+      width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0;
+    }
+    .badge-src {
+      display: inline-flex;
+      align-items: center;
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      padding: 0.12rem 0.4rem;
+      border-radius: 4px;
+      color: #fff;
+      white-space:nowrap;
+    }
+    .src-dvdms { background: var(--dvdms); }
+    .src-nic { background: var(--nic); }
+    .src-eoffice { background: var(--eoffice); }
+    .src-manual { background: var(--manual); }
+    .src-multi { background: #475569; }
+
+    /* Swimlane diagram */
+    .diagram {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 8px 30px rgba(0, 42, 64, 0.06);
+    }
+    .lane-head {
+      display: grid;
+      grid-template-columns: 140px 1fr;
+      background: var(--navy);
+      color: #fff;
+    }
+    .lane-head .label {
+      padding: 0.85rem 1rem;
+      font-weight: 700;
+      font-size: 0.8rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      border-right: 1px solid rgba(255,255,255,0.15);
+      display: flex;
+      align-items: center;
+    }
+    .lane-head .phases {
+      display: grid;
+      grid-template-columns: 1.1fr 1.35fr 1.35fr 1fr;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .lane-head .phases > div {
+      padding: 0.85rem 0.65rem;
+      border-right: 1px solid rgba(255,255,255,0.12);
+      text-align: center;
+    }
+    .lane-head .phases > div:last-child { border-right: none; }
+    .phase-plan { background: rgba(255,255,255,0.06); }
+    .phase-tender { background: rgba(180, 120, 255, 0.18); }
+    .phase-award { background: rgba(180, 120, 255, 0.28); }
+    .phase-close { background: rgba(13, 115, 119, 0.25); }
+
+    .lane {
+      display: grid;
+      grid-template-columns: 140px 1fr;
+      border-top: 1px solid var(--line);
+      min-height: 160px;
+    }
+    .lane-label {
+      padding: 1rem 0.85rem;
+      font-weight: 700;
+      font-size: 0.82rem;
+      border-right: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 0.35rem;
+      writing-mode: horizontal-tb;
+    }
+    .lane-label small { font-weight: 500; color: var(--muted); font-size: 0.7rem; }
+    .lane.gov .lane-label { background: var(--gov-bg); color: var(--gov); }
+    .lane.overlap .lane-label { background: var(--overlap-bg); color: var(--overlap); }
+    .lane.bidder .lane-label { background: var(--bid-bg); color: var(--bid); }
+
+    .lane-body {
+      display: grid;
+      grid-template-columns: 1.1fr 1.35fr 1.35fr 1fr;
+      gap: 0;
+      position: relative;
+    }
+    .col {
+      padding: 0.75rem 0.55rem;
+      border-right: 1px dashed var(--line);
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+      min-height: 100%;
+    }
+    .col:last-child { border-right: none; }
+    .lane.overlap .col.tender,
+    .lane.overlap .col.award {
+      background: linear-gradient(180deg, rgba(243, 232, 255, 0.65), rgba(243, 232, 255, 0.25));
+    }
+    .lane.gov .col.plan { background: rgba(232, 244, 251, 0.45); }
+    .lane.bidder .col.close { background: rgba(255, 244, 237, 0.4); }
+
+    .node {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 0.55rem 0.6rem;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+      position: relative;
+    }
+    .node.gov-only { border-left: 3px solid var(--gov); }
+    .node.bid-only { border-left: 3px solid var(--bid); }
+    .node.both {
+      border-left: 3px solid var(--overlap);
+      background: linear-gradient(135deg, #faf5ff 0%, #fff 70%);
+      box-shadow: 0 0 0 1px rgba(91, 45, 110, 0.08);
+    }
+    .node .num {
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: var(--muted);
+      margin-bottom: 0.15rem;
+    }
+    .node h4 {
+      font-size: 0.78rem;
+      color: var(--navy-deep);
+      margin-bottom: 0.3rem;
+      line-height: 1.25;
+    }
+    .node .srcs { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+    .node .note {
+      font-size: 0.68rem;
+      color: var(--muted);
+      margin-top: 0.3rem;
+      line-height: 1.35;
+    }
+
+    .overlap-banner {
+      grid-column: 2 / 4;
+      margin: 0.15rem 0.45rem;
+      padding: 0.4rem 0.65rem;
+      border-radius: 8px;
+      background: linear-gradient(90deg, #5b2d6e, #7c3aed);
+      color: #fff;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      text-align: center;
+    }
+
+    /* Flow arrows between phases */
+    .flow-note {
+      margin: 1rem 0 0;
+      padding: 0.85rem 1rem;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      font-size: 0.85rem;
+      color: var(--slate);
+    }
+    .flow-note strong { color: var(--navy); }
+
+    /* Detail table */
+    section.detail { margin-top: 2rem; }
+    section.detail h2 {
+      font-family: 'Fraunces', Georgia, serif;
+      font-size: 1.35rem;
+      color: var(--navy);
+      margin-bottom: 0.75rem;
+    }
+    .table-wrap {
+      overflow-x: auto;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+      min-width: 860px;
+    }
+    th, td {
+      padding: 0.65rem 0.75rem;
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    th {
+      background: var(--navy);
+      color: #fff;
+      font-weight: 600;
+      font-size: 0.75rem;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      position: sticky;
+      top: 0;
+    }
+    tr:nth-child(even) td { background: #f8fafc; }
+    tr.row-overlap td { background: #faf5ff; }
+    .actor {
+      display: inline-block;
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 0.12rem 0.4rem;
+      border-radius: 4px;
+    }
+    .actor-gov { background: var(--gov-bg); color: var(--gov); }
+    .actor-bid { background: var(--bid-bg); color: var(--bid); }
+    .actor-both { background: var(--overlap-bg); color: var(--overlap); }
+
+    .map-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+    @media (max-width: 900px) { .map-grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 520px) { .map-grid { grid-template-columns: 1fr; } }
+    .map-card {
+      border-radius: 12px;
+      padding: 1rem;
+      color: #fff;
+      min-height: 140px;
+    }
+    .map-card h3 { font-size: 1rem; margin-bottom: 0.4rem; }
+    .map-card p { font-size: 0.8rem; opacity: 0.95; line-height: 1.45; }
+    .map-card ul { margin: 0.5rem 0 0 1rem; font-size: 0.78rem; opacity: 0.95; }
+    .map-dvdms { background: linear-gradient(145deg, #0f766e, #115e59); }
+    .map-nic { background: linear-gradient(145deg, #1d4ed8, #1e3a8a); }
+    .map-eoffice { background: linear-gradient(145deg, #7c3aed, #5b21b6); }
+    .map-manual { background: linear-gradient(145deg, #b45309, #92400e); }
+
+    .venn {
+      margin-top: 1.5rem;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 1.25rem;
+    }
+    .venn h2 {
+      font-family: 'Fraunces', Georgia, serif;
+      font-size: 1.2rem;
+      color: var(--navy);
+      margin-bottom: 0.75rem;
+    }
+    .venn-visual {
+      display: grid;
+      grid-template-columns: 1fr 1.2fr 1fr;
+      gap: 0.75rem;
+      align-items: stretch;
+    }
+    @media (max-width: 800px) { .venn-visual { grid-template-columns: 1fr; } }
+    .venn-box {
+      border-radius: 14px;
+      padding: 1rem;
+      border: 2px solid;
+    }
+    .venn-gov { border-color: var(--gov); background: var(--gov-bg); }
+    .venn-mid {
+      border-color: var(--overlap);
+      background: var(--overlap-bg);
+      box-shadow: 0 0 0 4px rgba(91, 45, 110, 0.08);
+    }
+    .venn-bid { border-color: var(--bid); background: var(--bid-bg); }
+    .venn-box h3 { font-size: 0.9rem; margin-bottom: 0.5rem; }
+    .venn-gov h3 { color: var(--gov); }
+    .venn-mid h3 { color: var(--overlap); }
+    .venn-bid h3 { color: var(--bid); }
+    .venn-box ul { margin-left: 1.05rem; font-size: 0.8rem; }
+    .venn-box li { margin-bottom: 0.3rem; }
+
+    footer {
+      margin-top: 2rem;
+      text-align: center;
+      font-size: 0.78rem;
+      color: #94a3b8;
+    }
+
+    @media print {
+      body { background: #fff; }
+      .toolbar { display: none; }
+      .diagram, .soft-card, .table-wrap, .venn, .map-card { break-inside: avoid; }
+    }
+
+    @media (max-width: 720px) {
+      .lane-head, .lane { grid-template-columns: 1fr; }
+      .lane-label { border-right: none; border-bottom: 1px solid var(--line); flex-direction: row; align-items: center; gap: 0.75rem; }
+      .lane-head .phases, .lane-body { grid-template-columns: 1fr; }
+      .lane-head .phases > div, .col { border-right: none; border-bottom: 1px dashed var(--line); }
+      .overlap-banner { grid-column: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand-row">
+        <div>
+          <h1>MPPHCL Full Procurement Diagram</h1>
+          <p class="subtitle">
+            End-to-end Government (14) and Bidder (10) lifecycles with overlapping interventions,
+            existing MPPHSCL software, and data capture sources as used in the current MPPHCL scenario.
+          </p>
+        </div>
+        <div class="meta">
+          <span>MPPHSCL / MPPHCL</span>
+          <span>i-MCS ecosystem</span>
+          <span>GFR-aligned flow</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="toolbar">
+      <button type="button" class="primary" onclick="window.print()">Print / Save PDF</button>
+      <a class="btn" href="MP-Health-Procurement-Lifecycle-Guide.html">Stage checklist guide</a>
+      <button type="button" onclick="document.getElementById('source-map').scrollIntoView({behavior:'smooth'})">Jump to data sources</button>
+      <button type="button" onclick="document.getElementById('stage-table').scrollIntoView({behavior:'smooth'})">Stage-wise table</button>
+    </div>
+
+    <!-- Existing software -->
+    <div class="soft-strip" aria-label="Existing MPPHSCL software">
+      <article class="soft-card i-mcs">
+        <span class="tag">Umbrella</span>
+        <h3>i-MCS</h3>
+        <p>integrated Medical Corporation System — platform that automates MPPHSCL activities across supply chain and equipment.</p>
+      </article>
+      <article class="soft-card dvdms">
+        <span class="tag" style="background:var(--dvdms)">Supply chain</span>
+        <h3>DVDMS</h3>
+        <p>Drug and Vaccine Distribution Management System — stock, consumption, indent signals, warehouse &amp; facility inventory.</p>
+      </article>
+      <article class="soft-card eaush">
+        <span class="tag" style="background:var(--teal)">PO &amp; inventory</span>
+        <h3>e-Aushadhi</h3>
+        <p>Purchase Order, inventory management and distribution of drugs — primary PO / GRN / issue ledger in MPPHCL.</p>
+      </article>
+      <article class="soft-card emms">
+        <span class="tag" style="background:var(--amber)">Equipment</span>
+        <h3>EMMS</h3>
+        <p>Equipment Maintenance and Management System — asset / AMC context for equipment procurement &amp; upkeep.</p>
+      </article>
+    </div>
+
+    <div class="legend" aria-label="Diagram legend">
+      <div class="legend-item"><span class="swatch" style="background:var(--gov)"></span> Government only</div>
+      <div class="legend-item"><span class="swatch" style="background:var(--bid)"></span> Bidder only</div>
+      <div class="legend-item"><span class="swatch" style="background:var(--overlap)"></span> Overlap — both intervene</div>
+      <div class="legend-item"><span class="badge-src src-dvdms">DVDMS</span> Stock / indent / PO / GRN</div>
+      <div class="legend-item"><span class="badge-src src-nic">NIC portal</span> e-Tender / e-Bid</div>
+      <div class="legend-item"><span class="badge-src src-eoffice">Eoffice</span> File noting / AS–FS</div>
+      <div class="legend-item"><span class="badge-src src-manual">Manual</span> Paper / offline / OCR upload</div>
+    </div>
+
+    <!-- Main swimlane -->
+    <div class="diagram" role="img" aria-label="Procurement swimlane with government and bidder overlap">
+      <div class="lane-head">
+        <div class="label">Lane</div>
+        <div class="phases">
+          <div class="phase-plan">1 · Plan &amp; Indent</div>
+          <div class="phase-tender">2 · Tender &amp; Bid ← Overlap</div>
+          <div class="phase-award">3 · Award &amp; Contract ← Overlap</div>
+          <div class="phase-close">4 · Supply &amp; Pay</div>
+        </div>
+      </div>
+
+      <!-- Government lane -->
+      <div class="lane gov">
+        <div class="lane-label">
+          Government
+          <small>14 stages · MPPHCL / RM</small>
+        </div>
+        <div class="lane-body">
+          <div class="col plan">
+            <div class="node gov-only">
+              <div class="num">G1</div>
+              <h4>Need Identification</h4>
+              <div class="srcs"><span class="badge-src src-dvdms">DVDMS</span></div>
+              <p class="note">Stock, patient load, gap from inventory APIs</p>
+            </div>
+            <div class="node gov-only">
+              <div class="num">G2</div>
+              <h4>Stock Check</h4>
+              <div class="srcs"><span class="badge-src src-dvdms">DVDMS</span> <span class="badge-src src-dvdms">e-Aushadhi</span></div>
+              <p class="note">Warehouse, open PO, redistribute</p>
+            </div>
+            <div class="node gov-only">
+              <div class="num">G3</div>
+              <h4>Indent Raised</h4>
+              <div class="srcs"><span class="badge-src src-manual">Manual</span> <span class="badge-src src-dvdms">DVDMS</span></div>
+              <p class="note">IND-01 manual or automated from gap</p>
+            </div>
+            <div class="node gov-only">
+              <div class="num">G4–G5</div>
+              <h4>Consolidate · PR &amp; Budget</h4>
+              <div class="srcs"><span class="badge-src src-eoffice">Eoffice</span> <span class="badge-src src-manual">Manual</span></div>
+              <p class="note">AS/FS file noting; scanned sanction OCR</p>
+            </div>
+          </div>
+          <div class="col tender">
+            <div class="node gov-only">
+              <div class="num">G6</div>
+              <h4>Tender Preparation</h4>
+              <div class="srcs"><span class="badge-src src-nic">NIC portal</span> <span class="badge-src src-eoffice">Eoffice</span></div>
+              <p class="note">NIT/RFP draft; publish on state e-proc</p>
+            </div>
+            <div class="node both">
+              <div class="num">G7 ↔ V4</div>
+              <h4>Bid Evaluation ↔ Bid Submit</h4>
+              <div class="srcs"><span class="badge-src src-nic">NIC portal</span></div>
+              <p class="note">Tech + financial; L1/QCBS on portal bids</p>
+            </div>
+          </div>
+          <div class="col award">
+            <div class="node both">
+              <div class="num">G8–G9 ↔ V5–V6</div>
+              <h4>Contract · Award · LOA · PBG</h4>
+              <div class="srcs"><span class="badge-src src-nic">NIC portal</span> <span class="badge-src src-eoffice">Eoffice</span> <span class="badge-src src-manual">Manual</span></div>
+              <p class="note">NOA/LOA on NIC; agreement noting in Eoffice</p>
+            </div>
+            <div class="node gov-only">
+              <div class="num">G10</div>
+              <h4>Purchase Order</h4>
+              <div class="srcs"><span class="badge-src src-dvdms">e-Aushadhi</span> <span class="badge-src src-dvdms">DVDMS</span></div>
+              <p class="note">MPPHCL PO after contract gate</p>
+            </div>
+          </div>
+          <div class="col close">
+            <div class="node both">
+              <div class="num">G11 ↔ V7</div>
+              <h4>GRN &amp; Inspection ↔ Delivery</h4>
+              <div class="srcs"><span class="badge-src src-dvdms">DVDMS</span> <span class="badge-src src-manual">Manual</span></div>
+              <p class="note">Receipt in DVDMS; QC / batch manual</p>
+            </div>
+            <div class="node both">
+              <div class="num">G12–G13 ↔ V8–V9</div>
+              <h4>Invoice Match · Payment</h4>
+              <div class="srcs"><span class="badge-src src-dvdms">DVDMS</span> <span class="badge-src src-eoffice">Eoffice</span> <span class="badge-src src-manual">Manual</span></div>
+              <p class="note">3-way match; finance release via Eoffice</p>
+            </div>
+            <div class="node both">
+              <div class="num">G14 ↔ V10</div>
+              <h4>Renewal</h4>
+              <div class="srcs"><span class="badge-src src-nic">NIC portal</span> <span class="badge-src src-eoffice">Eoffice</span> <span class="badge-src src-manual">Manual</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Overlap lane -->
+      <div class="lane overlap">
+        <div class="lane-label">
+          Overlap zone
+          <small>Bidder ∩ Government</small>
+        </div>
+        <div class="lane-body">
+          <div class="col plan">
+            <div class="node both">
+              <div class="num">V1–V3 ∩ Gov review</div>
+              <h4>Empanelment handoff</h4>
+              <div class="srcs"><span class="badge-src src-manual">Manual</span> <span class="badge-src src-eoffice">Eoffice</span></div>
+              <p class="note">Bidder registers + KYC; Gov approves vendor code</p>
+            </div>
+          </div>
+          <div class="col tender">
+            <div class="overlap-banner">Shared intervention — Pre-bid · Clarifications · Corrigenda · Sealed bids · Evaluation</div>
+            <div class="node both">
+              <div class="num">Interaction</div>
+              <h4>Gov publishes · Bidder queries · Gov corrigenda · Bidder submits · Gov opens &amp; evaluates</h4>
+              <div class="srcs"><span class="badge-src src-nic">NIC portal</span></div>
+            </div>
+          </div>
+          <div class="col award">
+            <div class="overlap-banner">Shared intervention — LOA ack · PBG · Contract signing · SLA</div>
+            <div class="node both">
+              <div class="num">Interaction</div>
+              <h4>Both track LOA deadlines, PBG (SFMS/e-BG), and contract activation</h4>
+              <div class="srcs"><span class="badge-src src-nic">NIC portal</span> <span class="badge-src src-eoffice">Eoffice</span></div>
+            </div>
+          </div>
+          <div class="col close">
+            <div class="node both">
+              <div class="num">SLA desk</div>
+              <h4>Delivery disputes · LD · Escalation</h4>
+              <div class="srcs"><span class="badge-src src-manual">Manual</span> <span class="badge-src src-eoffice">Eoffice</span> <span class="badge-src src-dvdms">DVDMS</span></div>
+              <p class="note">Stores → Contract Mgr → Finance → Director</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bidder lane -->
+      <div class="lane bidder">
+        <div class="lane-label">
+          Bidder / Vendor
+          <small>10 stages · Bid-to-Pay</small>
+        </div>
+        <div class="lane-body">
+          <div class="col plan">
+            <div class="node bid-only">
+              <div class="num">V1</div>
+              <h4>Registration</h4>
+              <div class="srcs"><span class="badge-src src-manual">Manual</span> <span class="badge-src src-nic">NIC portal</span></div>
+            </div>
+            <div class="node bid-only">
+              <div class="num">V2</div>
+              <h4>KYC Verification</h4>
+              <div class="srcs"><span class="badge-src src-manual">Manual</span></div>
+            </div>
+            <div class="node both">
+              <div class="num">V3</div>
+              <h4>Vendor Approval</h4>
+              <div class="srcs"><span class="badge-src src-eoffice">Eoffice</span> <span class="badge-src src-manual">Manual</span></div>
+              <p class="note">Government decision; unlocks bidding</p>
+            </div>
+          </div>
+          <div class="col tender">
+            <div class="node both">
+              <div class="num">V4</div>
+              <h4>Bid Submission</h4>
+              <div class="srcs"><span class="badge-src src-nic">NIC portal</span></div>
+              <p class="note">Tech + financial sealed; EMD on portal</p>
+            </div>
+          </div>
+          <div class="col award">
+            <div class="node both">
+              <div class="num">V5</div>
+              <h4>Award Notification</h4>
+              <div class="srcs"><span class="badge-src src-nic">NIC portal</span></div>
+            </div>
+            <div class="node both">
+              <div class="num">V6</div>
+              <h4>Contract Execution</h4>
+              <div class="srcs"><span class="badge-src src-eoffice">Eoffice</span> <span class="badge-src src-manual">Manual</span></div>
+              <p class="note">PBG + signed agreement</p>
+            </div>
+          </div>
+          <div class="col close">
+            <div class="node both">
+              <div class="num">V7</div>
+              <h4>Delivery</h4>
+              <div class="srcs"><span class="badge-src src-manual">Manual</span> <span class="badge-src src-dvdms">DVDMS</span></div>
+            </div>
+            <div class="node both">
+              <div class="num">V8–V9</div>
+              <h4>Invoice · Payment Tracking</h4>
+              <div class="srcs"><span class="badge-src src-manual">Manual</span> <span class="badge-src src-eoffice">Eoffice</span></div>
+            </div>
+            <div class="node both">
+              <div class="num">V10</div>
+              <h4>Renewal request</h4>
+              <div class="srcs"><span class="badge-src src-manual">Manual</span> <span class="badge-src src-nic">NIC portal</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="flow-note">
+      <strong>How to read the overlap:</strong>
+      Purple nodes and the middle “Overlap zone” lane mark stages where <strong>Government and Bidder both intervene</strong>
+      (publish ↔ clarify ↔ bid ↔ evaluate ↔ award ↔ supply ↔ pay ↔ renew).
+      Blue-left nodes are Government-led planning; orange-left nodes are Bidder-led onboarding actions before the shared tender window.
+    </p>
+
+    <!-- Venn-style intervention -->
+    <div class="venn">
+      <h2>Bidder intervention ∩ Government intervention</h2>
+      <div class="venn-visual">
+        <div class="venn-box venn-gov">
+          <h3>Government only</h3>
+          <ul>
+            <li>Need Identification (DVDMS)</li>
+            <li>Stock Check (DVDMS / e-Aushadhi)</li>
+            <li>Indent &amp; consolidation</li>
+            <li>PR &amp; Budget (Eoffice)</li>
+            <li>Tender drafting before publish</li>
+            <li>PO generation (e-Aushadhi)</li>
+            <li>Payment release authority</li>
+          </ul>
+        </div>
+        <div class="venn-box venn-mid">
+          <h3>Overlapping interventions</h3>
+          <ul>
+            <li><strong>Empanelment:</strong> Bidder KYC ↔ Gov approval</li>
+            <li><strong>Pre-bid:</strong> queries ↔ corrigenda (NIC)</li>
+            <li><strong>Bidding:</strong> submit ↔ open/evaluate (NIC)</li>
+            <li><strong>Award:</strong> LOA ↔ acknowledge / PBG</li>
+            <li><strong>Contract:</strong> agreement + Eoffice noting</li>
+            <li><strong>Supply:</strong> delivery ↔ GRN / QC</li>
+            <li><strong>Pay:</strong> invoice ↔ 3-way match</li>
+            <li><strong>Renewal:</strong> vendor request ↔ RM finalize</li>
+            <li><strong>SLA:</strong> escalation on both sides</li>
+          </ul>
+        </div>
+        <div class="venn-box venn-bid">
+          <h3>Bidder only (until handoff)</h3>
+          <ul>
+            <li>Company registration pack</li>
+            <li>KYC document upload</li>
+            <li>EMD / bid security payment</li>
+            <li>Sealed bid preparation offline</li>
+            <li>Dispatch &amp; challan creation</li>
+            <li>Invoice raise &amp; bank tracking</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Data source map -->
+    <section class="detail" id="source-map">
+      <h2>Where MPPHCL captures data today</h2>
+      <div class="map-grid">
+        <div class="map-card map-dvdms">
+          <h3>DVDMS (+ e-Aushadhi)</h3>
+          <p>Operational supply-chain system of record inside i-MCS.</p>
+          <ul>
+            <li>Need / stock / open PO</li>
+            <li>Automated indent signals</li>
+            <li>Purchase Order (e-Aushadhi)</li>
+            <li>GRN, batch, distribution</li>
+            <li>EMMS for equipment AMC context</li>
+          </ul>
+        </div>
+        <div class="map-card map-nic">
+          <h3>NIC portal</h3>
+          <p>State / NIC e-Procurement (GePNIC-style) for competitive bidding.</p>
+          <ul>
+            <li>NIT / RFP publication</li>
+            <li>Pre-bid &amp; corrigenda</li>
+            <li>e-Bid + EMD</li>
+            <li>Bid opening &amp; evaluation pack</li>
+            <li>LOA / award notices</li>
+          </ul>
+        </div>
+        <div class="map-card map-eoffice">
+          <h3>Eoffice</h3>
+          <p>Digital file movement for administrative &amp; financial decisions.</p>
+          <ul>
+            <li>PR / AS / FS sanctions</li>
+            <li>Tender approval noting</li>
+            <li>Contract / legal concurrence</li>
+            <li>Vendor approval files</li>
+            <li>Payment sanction files</li>
+          </ul>
+        </div>
+        <div class="map-card map-manual">
+          <h3>Manual</h3>
+          <p>Paper, scanned notes, offline forms still in the loop.</p>
+          <ul>
+            <li>Indent Form IND-01</li>
+            <li>Handwritten / scanned sanctions (OCR)</li>
+            <li>Physical QC / acceptance</li>
+            <li>PBG hard copies / SFMS proofs</li>
+            <li>Invoice &amp; challan packs</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Stage table -->
+    <section class="detail" id="stage-table">
+      <h2>Stage-wise actor &amp; data source matrix</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Stage</th>
+              <th>Name</th>
+              <th>Actor</th>
+              <th>Primary data capture</th>
+              <th>Existing software / channel</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>G1</td><td>Need Identification</td>
+              <td><span class="actor actor-gov">Government</span></td>
+              <td><span class="badge-src src-dvdms">DVDMS</span></td>
+              <td>DVDMS inventory &amp; consumption APIs (i-MCS)</td>
+            </tr>
+            <tr>
+              <td>G2</td><td>Stock Check</td>
+              <td><span class="actor actor-gov">Government</span></td>
+              <td><span class="badge-src src-dvdms">DVDMS</span></td>
+              <td>DVDMS / e-Aushadhi warehouse &amp; open PO</td>
+            </tr>
+            <tr>
+              <td>G3</td><td>Indent Raised</td>
+              <td><span class="actor actor-gov">Government</span></td>
+              <td><span class="badge-src src-manual">Manual</span> / <span class="badge-src src-dvdms">DVDMS</span></td>
+              <td>Manual IND-01 or automated from DVDMS gap</td>
+            </tr>
+            <tr>
+              <td>G4</td><td>Demand Consolidation</td>
+              <td><span class="actor actor-gov">Government</span></td>
+              <td><span class="badge-src src-dvdms">DVDMS</span> / <span class="badge-src src-manual">Manual</span></td>
+              <td>District consolidate against DVDMS stock</td>
+            </tr>
+            <tr>
+              <td>G5</td><td>PR &amp; Budget Approval</td>
+              <td><span class="actor actor-gov">Government</span></td>
+              <td><span class="badge-src src-eoffice">Eoffice</span> / <span class="badge-src src-manual">Manual</span></td>
+              <td>Eoffice AS/FS; scanned notes uploaded / OCR</td>
+            </tr>
+            <tr>
+              <td>G6</td><td>Tender Preparation</td>
+              <td><span class="actor actor-gov">Government</span></td>
+              <td><span class="badge-src src-nic">NIC portal</span> / <span class="badge-src src-eoffice">Eoffice</span></td>
+              <td>Draft in Eoffice; publish on NIC e-Procurement</td>
+            </tr>
+            <tr class="row-overlap">
+              <td>V1–V3</td><td>Registration · KYC · Approval</td>
+              <td><span class="actor actor-both">Overlap</span></td>
+              <td><span class="badge-src src-manual">Manual</span> / <span class="badge-src src-eoffice">Eoffice</span></td>
+              <td>Bidder uploads; Gov approves via Eoffice / portal</td>
+            </tr>
+            <tr class="row-overlap">
+              <td>V4 ↔ G7</td><td>Bid Submission ↔ Bid Evaluation</td>
+              <td><span class="actor actor-both">Overlap</span></td>
+              <td><span class="badge-src src-nic">NIC portal</span></td>
+              <td>All sealed bids &amp; opening on NIC portal</td>
+            </tr>
+            <tr class="row-overlap">
+              <td>G8–G9 ↔ V5–V6</td><td>Contract · Award · LOA · PBG</td>
+              <td><span class="actor actor-both">Overlap</span></td>
+              <td><span class="badge-src src-nic">NIC portal</span> / <span class="badge-src src-eoffice">Eoffice</span> / <span class="badge-src src-manual">Manual</span></td>
+              <td>LOA on NIC; agreement file in Eoffice; PBG proofs manual</td>
+            </tr>
+            <tr>
+              <td>G10</td><td>Purchase Order</td>
+              <td><span class="actor actor-gov">Government</span></td>
+              <td><span class="badge-src src-dvdms">e-Aushadhi / DVDMS</span></td>
+              <td>e-Aushadhi PO (MPPHCL template)</td>
+            </tr>
+            <tr class="row-overlap">
+              <td>G11 ↔ V7</td><td>GRN &amp; Inspection ↔ Delivery</td>
+              <td><span class="actor actor-both">Overlap</span></td>
+              <td><span class="badge-src src-dvdms">DVDMS</span> / <span class="badge-src src-manual">Manual</span></td>
+              <td>Challan manual; GRN &amp; batch in DVDMS / e-Aushadhi; QC manual</td>
+            </tr>
+            <tr class="row-overlap">
+              <td>G12–G13 ↔ V8–V9</td><td>Invoice Match · Payment</td>
+              <td><span class="actor actor-both">Overlap</span></td>
+              <td><span class="badge-src src-dvdms">DVDMS</span> / <span class="badge-src src-eoffice">Eoffice</span> / <span class="badge-src src-manual">Manual</span></td>
+              <td>PO+GRN from DVDMS; invoice manual; sanction in Eoffice</td>
+            </tr>
+            <tr class="row-overlap">
+              <td>G14 ↔ V10</td><td>Renewal</td>
+              <td><span class="actor actor-both">Overlap</span></td>
+              <td><span class="badge-src src-nic">NIC portal</span> / <span class="badge-src src-eoffice">Eoffice</span> / <span class="badge-src src-manual">Manual</span></td>
+              <td>Vendor request; RM finalize; fresh NIT may return to NIC</td>
+            </tr>
+            <tr>
+              <td>—</td><td>Equipment AMC / uptime context</td>
+              <td><span class="actor actor-gov">Government</span></td>
+              <td><span class="badge-src src-multi">EMMS</span></td>
+              <td>EMMS under i-MCS (equipment line)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer>
+      MPPHCL / MPPHSCL procurement reference diagram · Aligned to prototype Gov 14 + Vendor 10 stages ·
+      Data sources reflect existing MPPHCL channels (DVDMS, NIC portal, Eoffice, Manual) under i-MCS
+    </footer>
+  </div>
+</body>
+</html>
