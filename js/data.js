@@ -28,7 +28,7 @@ const VENDOR_STAGE_CHECKLIST = {
   4: ['Review tender and bid status in the table', 'Check EMD and document flags', 'Refresh to fetch the latest bid records', 'Confirm sync once bids appear to continue'],
   5: ['Review LOA / award records in the table', 'Check PBG due date and award value', 'Acknowledge LOA for issued awards', 'Confirm sync to continue lifecycle'],
   6: ['Select tender for this contract pack', 'LOI issue → LOI accept → PBG submission', 'Review draft template synced with tender docs', 'Upload tender-specific PBG, SBG, SOW, deliverables & signed contract'],
-  7: ['Dispatch with delivery challan', 'Batch / serial & expiry documentation', 'Cold chain logs (if applicable)', 'Update delivery status on portal'],
+  7: ['Review delivery records in the table', 'Check challan, GRN and dispatch status', 'Refresh to fetch the latest deliveries', 'Confirm sync once records appear to continue'],
   8: ['Raise invoice with GRN reference', 'Attach delivery & acceptance proof', 'Submit invoice on portal', 'Track invoice verification status'],
   9: ['Monitor payment processing', 'Confirm credit to bank account', 'Download payment advice / receipt', 'Close invoice cycle'],
   10: ['Select Active / In Progress contract or MSA', 'Choose Fresh renewal or Extra quality order', 'Propose renewal period and reason', 'Submit request for Resource Manager review']
@@ -58,6 +58,7 @@ const VENDOR_STAGE_TIPS = {
   4: 'Use Refresh to pull the latest bid status, then confirm sync to continue.',
   5: 'Refresh award records, acknowledge LOA where required, then confirm sync to continue.',
   6: 'Select the tender, accept LOI, submit PBG, review SLA / schedule / penalties from the RFP, then upload tender-specific contract documents.',
+  7: 'Refresh delivery records, review challan / GRN status, then confirm sync to continue.',
   8: 'Invoice must reference GRN and delivery proof for three-way match.',
   9: 'Track payment status on the portal; escalate delays through helpdesk.',
   10: 'Raise renewal only against Active / In Progress contracts. RM finalizes on Stage 14.'
@@ -1077,10 +1078,10 @@ const VENDOR_WORKFLOW = [
   { id: 1, name: 'Registration', desc: 'Submit company profile and mandatory registration documents on the vendor portal.', status: 'pending' },
   { id: 2, name: 'KYC Verification', desc: 'Complete KYC, bank account verification, and regulatory compliance checks.', status: 'pending' },
   { id: 3, name: 'Vendor Approval', desc: 'Department reviews and approves vendor registration; vendor code is activated for bidding.', status: 'pending' },
-  { id: 4, name: 'Bid Submission', desc: '', status: 'pending' },
+  { id: 4, name: 'Bid Submitted', desc: '', status: 'pending' },
   { id: 5, name: 'Award Notification', desc: '', status: 'pending' },
   { id: 6, name: 'Contract Execution', desc: 'Select tender, complete LOI → PBG → draft, and upload tender-specific contract documents.', status: 'pending' },
-  { id: 7, name: 'Delivery', desc: 'Dispatch goods with challans, batch records, and required documentation.', status: 'pending' },
+  { id: 7, name: 'Delivery', desc: '', status: 'pending' },
   { id: 8, name: 'Invoice Submission', desc: 'Raise invoice with GRN reference and delivery proof for payment processing.', status: 'pending' },
   { id: 9, name: 'Payment Tracking', desc: 'Track payment status, receive payment advice, and close the invoice cycle.', status: 'pending' },
   { id: 10, name: 'Renewal', desc: 'Request renewal on an existing tender, MSA, or rate contract for Resource Manager review.', status: 'pending' }
@@ -1107,7 +1108,7 @@ const ALERTS_GOV = [
 
 const ALERTS_VENDOR = [
   { id: 1, type: 'corrigendum', title: 'Corrigendum Published', msg: 'TND-2026-MP-0042 - Technical specifications updated', date: '2026-09-01', impact: 'Update technical bid', action: 'Download corrigendum', unread: true },
-  { id: 2, type: 'approval', title: 'Bid Submission Reminder', msg: 'TND-2026-MP-0055 closes in 3 days', date: '2026-09-05', impact: 'Miss deadline = rejection', action: 'Complete bid submission', unread: true },
+  { id: 2, type: 'approval', title: 'Bid Submitted Reminder', msg: 'TND-2026-MP-0055 closes in 3 days', date: '2026-09-05', impact: 'Miss deadline = rejection', action: 'Complete bid submission', unread: true },
   { id: 3, type: 'expiry', title: 'Document Expiry', msg: 'ISO 13485 certificate expires in 22 days', date: '2026-09-24', impact: 'Eligibility at risk', action: 'Upload renewed certificate', unread: true },
   { id: 4, type: 'approval', title: 'LOA Received', msg: 'TND-2026-MP-0038 - Letter of Award issued', date: '2026-08-29', impact: 'Submit PBG within 15 days', action: 'Acknowledge LOA', unread: true }
 ];
@@ -1138,7 +1139,7 @@ const GOV_NOTICES = [
     time: '09:00 IST',
     from: 'Tender Management Unit',
     ref: 'TND-2026-MP-0055',
-    actionLabel: 'Go to Bid Submission',
+    actionLabel: 'Go to Bid Submitted',
     actionPage: 'bids',
     unread: true
   },
@@ -1246,7 +1247,15 @@ const VENDOR_BID_DVDMS_API = {
       status: 'Under Evaluation',
       submittedOn: '10-09-2026',
       periodDate: '10-09-2026',
-      portal: 'Portal'
+      portal: 'Portal',
+      biddedItems: [
+        'Paracetamol 500mg Tab',
+        'Amoxicillin 250mg Cap',
+        'IV Normal Saline 500ml',
+        'Metformin 500mg Tab',
+        'Essential Medicines RC Pack',
+        'IV Fluids & Saline Combo'
+      ]
     },
     {
       bidId: 'BID-2026-1088',
@@ -1261,7 +1270,8 @@ const VENDOR_BID_DVDMS_API = {
       status: 'Draft',
       submittedOn: '—',
       periodDate: '28-08-2026',
-      portal: 'Portal'
+      portal: 'Portal',
+      biddedItems: ['Digital X-Ray']
     },
     {
       bidId: 'BID-2026-1115',
@@ -1276,7 +1286,8 @@ const VENDOR_BID_DVDMS_API = {
       status: 'Under Evaluation',
       submittedOn: '12-09-2026',
       periodDate: '12-09-2026',
-      portal: 'Portal'
+      portal: 'Portal',
+      biddedItems: ['Disposable Gloves', 'Surgical Masks']
     },
     {
       bidId: 'BID-2026-0981',
@@ -1291,7 +1302,8 @@ const VENDOR_BID_DVDMS_API = {
       status: 'Awarded',
       submittedOn: '18-08-2026',
       periodDate: '18-08-2026',
-      portal: 'Portal'
+      portal: 'Portal',
+      biddedItems: ['Hospital Linen', 'Examination Gowns']
     },
     {
       bidId: 'BID-2026-1203',
@@ -1306,7 +1318,8 @@ const VENDOR_BID_DVDMS_API = {
       status: 'Draft',
       submittedOn: '—',
       periodDate: '01-09-2026',
-      portal: 'Portal'
+      portal: 'Portal',
+      biddedItems: ['HMIS Upgrade']
     }
   ]
 };
@@ -1328,7 +1341,8 @@ const VENDOR_AWARD_SYNC_API = {
       pbgDue: '13-09-2026',
       value: '₹85 L',
       acknowledgement: 'Pending',
-      periodDate: '29-08-2026'
+      periodDate: '29-08-2026',
+      awardedItems: ['Hospital Linen', 'Examination Gowns']
     },
     {
       awardId: 'AWD-2026-0042',
@@ -1340,7 +1354,15 @@ const VENDOR_AWARD_SYNC_API = {
       pbgDue: '17-09-2026',
       value: '₹12.1 Cr',
       acknowledgement: 'Pending',
-      periodDate: '02-09-2026'
+      periodDate: '02-09-2026',
+      awardedItems: [
+        'Paracetamol 500mg Tab',
+        'Amoxicillin 250mg Cap',
+        'IV Normal Saline 500ml',
+        'Metformin 500mg Tab',
+        'Essential Medicines RC Pack',
+        'IV Fluids & Saline Combo'
+      ]
     },
     {
       awardId: 'AWD-2026-0091',
@@ -1352,7 +1374,8 @@ const VENDOR_AWARD_SYNC_API = {
       pbgDue: '04-09-2026',
       value: '₹28 L',
       acknowledgement: 'Acknowledged',
-      periodDate: '20-08-2026'
+      periodDate: '20-08-2026',
+      awardedItems: ['Disposable Gloves', 'Surgical Masks']
     },
     {
       awardId: 'AWD-2026-0072',
@@ -1364,7 +1387,34 @@ const VENDOR_AWARD_SYNC_API = {
       pbgDue: '20-09-2026',
       value: '₹45 L',
       acknowledgement: 'Pending',
-      periodDate: '05-09-2026'
+      periodDate: '05-09-2026',
+      awardedItems: ['Surgical Instruments']
+    },
+    {
+      awardId: 'AWD-2026-0061',
+      tenderId: 'TND-2026-MP-0061',
+      title: 'HMIS Software Upgrade',
+      category: 'Services',
+      loaStatus: 'Issued',
+      loaDate: '08-09-2026',
+      pbgDue: '23-09-2026',
+      value: '₹1.8 Cr',
+      acknowledgement: 'Pending',
+      periodDate: '08-09-2026',
+      awardScope: 'Category-level LOA for HMIS / digital health services under the selected tender package.'
+    },
+    {
+      awardId: 'AWD-2026-0110',
+      tenderId: 'TND-2026-MP-0110',
+      title: 'Medical Oxygen Plant O&M',
+      category: 'Others',
+      loaStatus: 'Issued',
+      loaDate: '01-09-2026',
+      pbgDue: '16-09-2026',
+      value: '₹1.5 Cr',
+      acknowledgement: 'Pending',
+      periodDate: '01-09-2026',
+      awardScope: 'Category-level LOA covering oxygen plant operations & maintenance under Others.'
     },
     {
       awardId: 'AWD-2025-0198',
@@ -1376,7 +1426,133 @@ const VENDOR_AWARD_SYNC_API = {
       pbgDue: '30-04-2025',
       value: '₹3.35 Cr',
       acknowledgement: 'Acknowledged',
-      periodDate: '15-04-2025'
+      periodDate: '15-04-2025',
+      awardedItems: [
+        'Paracetamol 500mg Tab',
+        'Amoxicillin 250mg Cap',
+        'Insulin 40 IU',
+        'Ceftriaxone 1g Inj',
+        'Essential Medicines RC Pack'
+      ]
+    }
+  ]
+};
+
+const VENDOR_DELIVERY_SYNC_API = {
+  meta: {
+    status: 'Synced',
+    lastSynced: '08-09-2026 18:05 IST'
+  },
+  rows: [
+    {
+      deliveryId: 'DEL-2026-0456',
+      challan: 'CHL-2026-0456',
+      poId: 'PO-2026-0089',
+      tenderId: 'TND-2026-MP-0038',
+      title: 'Hospital Linen Supply',
+      category: 'Consumables',
+      items: 'Hospital Linen - Batch 3',
+      qty: '2,400 sets',
+      amount: '₹4.25 L',
+      vehicle: 'MP-04-AB-2190 / LR-88912',
+      dispatchDate: '25-08-2026',
+      expectedDate: '28-08-2026',
+      deliveryDate: '28-08-2026',
+      status: 'Delivered',
+      grn: 'Accepted',
+      coldChain: 'No',
+      invoice: 'INV-0892',
+      payment: 'Processing',
+      periodDate: '28-08-2026',
+      remarks: 'Batch 3 against rate contract CNT-2026-0089.'
+    },
+    {
+      deliveryId: 'DEL-2026-0461',
+      challan: 'CHL-2026-0461',
+      poId: 'PO-2026-0042',
+      tenderId: 'TND-2026-MP-0042',
+      title: 'Essential Medicines Rate Contract',
+      category: 'Drugs',
+      items: 'Essential Medicines RC — Lot 1',
+      qty: '96 SKUs',
+      amount: '₹1.1 Cr',
+      vehicle: 'MP-09-CD-4412 / LR-90211',
+      dispatchDate: '03-09-2026',
+      expectedDate: '05-09-2026',
+      deliveryDate: '05-09-2026',
+      status: 'Delivered',
+      grn: 'Accepted',
+      coldChain: 'Yes',
+      invoice: 'INV-0910',
+      payment: 'Processing',
+      periodDate: '05-09-2026',
+      remarks: 'First lot under 24-month rate contract. Cold-chain verified.'
+    },
+    {
+      deliveryId: 'DEL-2026-0457',
+      challan: 'CHL-2026-0457',
+      poId: 'PO-2025-0234',
+      tenderId: 'TND-2025-MP-0198',
+      title: 'Essential Medicines Rate Contract 2025',
+      category: 'Drugs',
+      items: 'Essential Medicines Q3',
+      qty: '148 SKUs',
+      amount: '₹62 L',
+      vehicle: 'MP-04-EF-1188 / LR-77102',
+      dispatchDate: '08-06-2026',
+      expectedDate: '12-06-2026',
+      deliveryDate: '12-06-2026',
+      status: 'Delivered',
+      grn: 'Accepted',
+      coldChain: 'Yes',
+      invoice: 'INV-0893',
+      payment: 'Paid',
+      periodDate: '12-06-2026',
+      remarks: 'Q3 release fully accepted at CWH Bhopal.'
+    },
+    {
+      deliveryId: 'DEL-2026-0472',
+      challan: 'CHL-2026-0472',
+      poId: 'PO-2026-0089',
+      tenderId: 'TND-2026-MP-0038',
+      title: 'Hospital Linen Supply',
+      category: 'Consumables',
+      items: 'Hospital Linen - Batch 4 (in transit)',
+      qty: '1,800 sets',
+      amount: '₹3.2 L',
+      vehicle: 'MP-04-GH-3301 / LR-91550',
+      dispatchDate: '07-09-2026',
+      expectedDate: '10-09-2026',
+      deliveryDate: '—',
+      status: 'In Transit',
+      grn: 'Pending',
+      coldChain: 'No',
+      invoice: '—',
+      payment: '—',
+      periodDate: '07-09-2026',
+      remarks: 'Dispatched; awaiting facility receipt.'
+    },
+    {
+      deliveryId: 'DEL-2025-0388',
+      challan: 'CHL-2025-0388',
+      poId: 'PO-2025-0142',
+      tenderId: 'TND-2025-MP-0142',
+      title: 'Patient Monitor AMC',
+      category: 'Equipment',
+      items: 'Patient Monitor AMC — FY visit',
+      qty: '48 units',
+      amount: '₹18 L',
+      vehicle: 'Service van — Indore',
+      dispatchDate: '12-05-2025',
+      expectedDate: '15-05-2025',
+      deliveryDate: '15-05-2025',
+      status: 'Delivered',
+      grn: 'Accepted',
+      coldChain: 'No',
+      invoice: 'INV-0712',
+      payment: 'Paid',
+      periodDate: '15-05-2025',
+      remarks: 'Scheduled AMC completed.'
     }
   ]
 };
@@ -1523,7 +1699,7 @@ const NAV_VENDOR = [
   { id: 'workflow', icon: 'fa-arrows-rotate', label: 'Bid-to-Pay Lifecycle', badge: 0 },
   { id: 'registration', icon: 'fa-id-card', label: 'Profile & KYC', badge: 0 },
   { id: 'tenders', icon: 'fa-magnifying-glass', label: 'Tender Discovery', badge: 0 },
-  { id: 'bids', icon: 'fa-paper-plane', label: 'Bid Submission', badge: 0 },
+  { id: 'bids', icon: 'fa-paper-plane', label: 'Bid Submitted', badge: 0 },
   { id: 'clarifications', icon: 'fa-comments', label: 'Clarifications', badge: 0 },
   { id: 'work-queue', icon: 'fa-bell', label: 'Alerts & Work Queue', badge: 0 },
   { section: 'Execution' },
@@ -1545,9 +1721,9 @@ const VENDOR_REPOSITORY_DOCS = [
   { id: 'REP-KYC-002', name: 'Drug License DL-MH-2024-1102', stage: 2, stageName: 'KYC Verification', docType: 'License', relatedRef: 'Expires 20-06-2028', uploadedOn: '03-08-2026', size: '560 KB', status: 'On file', category: 'Drugs', file: 'Drug-License.pdf' },
   { id: 'REP-KYC-003', name: 'ISO 13485 Certificate', stage: 2, stageName: 'KYC Verification', docType: 'Certificate', relatedRef: 'Valid until 15-08-2027', uploadedOn: '03-08-2026', size: '480 KB', status: 'On file', category: 'Drugs', file: 'ISO-13485.pdf' },
   { id: 'REP-APR-001', name: 'Vendor Approval Letter', stage: 3, stageName: 'Vendor Approval', docType: 'Approval', relatedRef: 'VND-MP-000123', uploadedOn: '10-08-2026', size: '290 KB', status: 'On file', category: 'Drugs', file: 'Vendor-Approval-Letter.pdf' },
-  { id: 'REP-BID-001', name: 'Technical Bid Pack — TND-2026-MP-0038', stage: 4, stageName: 'Bid Submission', docType: 'Technical bid', relatedRef: 'TND-2026-MP-0038', uploadedOn: '18-08-2026', size: '2.1 MB', status: 'Submitted', category: 'Consumables', file: 'Tech-Bid-TND-0038.pdf' },
-  { id: 'REP-BID-002', name: 'Financial Bid Pack — TND-2026-MP-0038', stage: 4, stageName: 'Bid Submission', docType: 'Financial bid', relatedRef: 'TND-2026-MP-0038', uploadedOn: '18-08-2026', size: '890 KB', status: 'Submitted', category: 'Consumables', file: 'Fin-Bid-TND-0038.pdf' },
-  { id: 'REP-BID-003', name: 'EMD Payment Advice', stage: 4, stageName: 'Bid Submission', docType: 'EMD', relatedRef: '₹3,20,000', uploadedOn: '18-08-2026', size: '210 KB', status: 'Submitted', category: 'Consumables', file: 'EMD-Payment-Advice.pdf' },
+  { id: 'REP-BID-001', name: 'Technical Bid Pack — TND-2026-MP-0038', stage: 4, stageName: 'Bid Submitted', docType: 'Technical bid', relatedRef: 'TND-2026-MP-0038', uploadedOn: '18-08-2026', size: '2.1 MB', status: 'Submitted', category: 'Consumables', file: 'Tech-Bid-TND-0038.pdf' },
+  { id: 'REP-BID-002', name: 'Financial Bid Pack — TND-2026-MP-0038', stage: 4, stageName: 'Bid Submitted', docType: 'Financial bid', relatedRef: 'TND-2026-MP-0038', uploadedOn: '18-08-2026', size: '890 KB', status: 'Submitted', category: 'Consumables', file: 'Fin-Bid-TND-0038.pdf' },
+  { id: 'REP-BID-003', name: 'EMD Payment Advice', stage: 4, stageName: 'Bid Submitted', docType: 'EMD', relatedRef: '₹3,20,000', uploadedOn: '18-08-2026', size: '210 KB', status: 'Submitted', category: 'Consumables', file: 'EMD-Payment-Advice.pdf' },
   { id: 'REP-AWD-001', name: 'LOA Acknowledgement Copy', stage: 5, stageName: 'Award Notification', docType: 'LOA', relatedRef: 'TND-2026-MP-0038', uploadedOn: '29-08-2026', size: '175 KB', status: 'Acknowledged', category: 'Consumables', file: 'LOA-Ack-0038.pdf' },
   { id: 'REP-CNT-001', name: 'Performance Bank Guarantee (PBG)', stage: 6, stageName: 'Contract Execution', docType: 'PBG', relatedRef: 'CNT-2026-0089', uploadedOn: '02-09-2026', size: '640 KB', status: 'Submitted', category: 'Consumables', file: 'PBG-CNT-0089.pdf' },
   { id: 'REP-CNT-002', name: 'Signed Contract Agreement', stage: 6, stageName: 'Contract Execution', docType: 'Contract', relatedRef: 'CNT-2026-0089', uploadedOn: '02-09-2026', size: '1.4 MB', status: 'Signed', category: 'Consumables', file: 'Signed-Contract-0089.pdf' },
@@ -1909,32 +2085,39 @@ const SCORE_WEIGHTS = [
 /** Item / drug types by category — used in analytics drill-downs */
 const CATEGORY_ITEM_TYPES = {
   Drugs: [
-    { name: 'Paracetamol 500mg', type: 'Analgesic', tenders: 2, spend: '₹2.1 Cr', facilities: 48 },
-    { name: 'Oncology Drug Pack', type: 'Oncology', tenders: 1, spend: '₹8.4 Cr', facilities: 12 },
-    { name: 'IV Fluids & Saline', type: 'Infusion', tenders: 1, spend: '₹1.2 Cr', facilities: 62 },
-    { name: 'Insulin & Diabetic Care', type: 'Chronic Care', tenders: 1, spend: '₹3.6 Cr', facilities: 35 },
-    { name: 'Essential Medicines RC', type: 'Formulary', tenders: 1, spend: '₹12.5 Cr', facilities: 90 }
+    { name: 'Paracetamol 500mg Tab', type: 'Analgesic', code: 'DRG-PARA-500', unit: '10×10 blister', tenders: 2, spend: '₹2.1 Cr', facilities: 48 },
+    { name: 'Amoxicillin 250mg Cap', type: 'Antibiotic', code: 'DRG-AMOX-250', unit: 'Strip of 10', tenders: 1, spend: '₹1.4 Cr', facilities: 40 },
+    { name: 'IV Normal Saline 500ml', type: 'Infusion', code: 'DRG-NS-500', unit: 'Bottle', tenders: 1, spend: '₹1.2 Cr', facilities: 62 },
+    { name: 'ORS Sachets', type: 'ORS', code: 'DRG-ORS-20', unit: 'Box of 50', tenders: 1, spend: '₹42 L', facilities: 55 },
+    { name: 'Metformin 500mg Tab', type: 'Chronic Care', code: 'DRG-MET-500', unit: 'Strip of 10', tenders: 1, spend: '₹95 L', facilities: 38 },
+    { name: 'Insulin 40 IU', type: 'Chronic Care', code: 'DRG-INS-40', unit: 'Vial', tenders: 1, spend: '₹3.6 Cr', facilities: 35 },
+    { name: 'Ceftriaxone 1g Inj', type: 'Antibiotic', code: 'DRG-CEF-1G', unit: 'Vial', tenders: 1, spend: '₹1.1 Cr', facilities: 44 },
+    { name: 'Oncology Drug Pack', type: 'Oncology', code: 'DRG-ONCO-PK', unit: 'Kit', tenders: 1, spend: '₹8.4 Cr', facilities: 12 },
+    { name: 'Essential Medicines RC Pack', type: 'Formulary', code: 'DRG-EMRC-01', unit: 'Assorted', tenders: 1, spend: '₹12.5 Cr', facilities: 90 },
+    { name: 'IV Fluids & Saline Combo', type: 'Infusion', code: 'DRG-IVF-COM', unit: 'Carton', tenders: 1, spend: '₹1.8 Cr', facilities: 50 }
   ],
   Equipment: [
-    { name: 'CT Scanner', type: 'Imaging', tenders: 1, spend: '₹3.2 Cr', facilities: 4 },
-    { name: 'Digital X-Ray', type: 'Imaging', tenders: 1, spend: '₹2.8 Cr', facilities: 8 },
-    { name: 'Patient Monitors', type: 'Critical Care', tenders: 1, spend: '₹1.1 Cr', facilities: 22 },
-    { name: 'Surgical Instruments', type: 'OT', tenders: 1, spend: '₹45 L', facilities: 18 }
+    { name: 'CT Scanner', type: 'Imaging', code: 'EQP-CT-01', unit: 'Unit', tenders: 1, spend: '₹3.2 Cr', facilities: 4 },
+    { name: 'Digital X-Ray', type: 'Imaging', code: 'EQP-DXR-01', unit: 'Unit', tenders: 1, spend: '₹2.8 Cr', facilities: 8 },
+    { name: 'Patient Monitors', type: 'Critical Care', code: 'EQP-PM-01', unit: 'Unit', tenders: 1, spend: '₹1.1 Cr', facilities: 22 },
+    { name: 'Surgical Instruments', type: 'OT', code: 'EQP-SI-01', unit: 'Kit', tenders: 1, spend: '₹45 L', facilities: 18 }
   ],
   Services: [
-    { name: 'HMIS Upgrade', type: 'IT', tenders: 1, spend: '₹1.8 Cr', facilities: 51 },
-    { name: 'Telemedicine Platform', type: 'Digital Health', tenders: 1, spend: '₹95 L', facilities: 30 },
-    { name: 'Hospital Security', type: 'Facility', tenders: 1, spend: '₹72 L', facilities: 14 }
+    { name: 'HMIS Upgrade', type: 'IT', code: 'SRV-HMIS-01', unit: 'Lot', tenders: 1, spend: '₹1.8 Cr', facilities: 51 },
+    { name: 'Telemedicine Platform', type: 'Digital Health', code: 'SRV-TM-01', unit: 'Lot', tenders: 1, spend: '₹95 L', facilities: 30 },
+    { name: 'Hospital Security', type: 'Facility', code: 'SRV-SEC-01', unit: 'Month', tenders: 1, spend: '₹72 L', facilities: 14 }
   ],
   Consumables: [
-    { name: 'Hospital Linen', type: 'Textile', tenders: 1, spend: '₹85 L', facilities: 40 },
-    { name: 'Disposable Gloves', type: 'PPE', tenders: 1, spend: '₹28 L', facilities: 75 },
-    { name: 'Pathology Reagents', type: 'Lab', tenders: 1, spend: '₹56 L', facilities: 20 }
+    { name: 'Hospital Linen', type: 'Textile', code: 'CON-LIN-01', unit: 'Set', tenders: 1, spend: '₹85 L', facilities: 40 },
+    { name: 'Disposable Gloves', type: 'PPE', code: 'CON-GLV-01', unit: 'Box', tenders: 1, spend: '₹28 L', facilities: 75 },
+    { name: 'Pathology Reagents', type: 'Lab', code: 'CON-PRG-01', unit: 'Kit', tenders: 1, spend: '₹56 L', facilities: 20 },
+    { name: 'Surgical Masks', type: 'PPE', code: 'CON-MSK-01', unit: 'Box of 100', tenders: 1, spend: '₹18 L', facilities: 60 },
+    { name: 'Examination Gowns', type: 'PPE', code: 'CON-GWN-01', unit: 'Pack', tenders: 1, spend: '₹22 L', facilities: 35 }
   ],
   Others: [
-    { name: 'Ambulance Fleet O&M', type: 'Transport', tenders: 1, spend: '₹32 L', facilities: 16 },
-    { name: 'Medical Oxygen Plant', type: 'Infrastructure', tenders: 1, spend: '₹1.5 Cr', facilities: 6 },
-    { name: 'Waste Management', type: 'Facility', tenders: 1, spend: '₹42 L', facilities: 25 }
+    { name: 'Ambulance Fleet O&M', type: 'Transport', code: 'OTH-AMB-01', unit: 'Vehicle / year', tenders: 1, spend: '₹32 L', facilities: 16 },
+    { name: 'Medical Oxygen Plant', type: 'Infrastructure', code: 'OTH-OXY-01', unit: 'Plant', tenders: 1, spend: '₹1.5 Cr', facilities: 6 },
+    { name: 'Waste Management', type: 'Facility', code: 'OTH-WST-01', unit: 'Month', tenders: 1, spend: '₹42 L', facilities: 25 }
   ]
 };
 
