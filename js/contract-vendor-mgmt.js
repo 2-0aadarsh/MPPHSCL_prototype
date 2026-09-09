@@ -355,12 +355,125 @@ function openContractMgmtDetail(contractId) {
   </div>`, { wide: true, large: true, extraWide: true });
 }
 
+const aiEligVendorState = { category: 'all', page: 1 };
+const vendorProfileFilterState = { category: 'all' };
+const selfOnboardFilterState = { category: 'all', page: 1 };
+
+function parseVendorMgmtScore(row) {
+  const raw = String(row?.score ?? row?.confidence ?? '0').replace(/%/g, '').trim();
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function formatVendorMgmtScore(row) {
+  if (row?.score == null && row?.confidence == null) return '—';
+  return String(parseVendorMgmtScore(row));
+}
+
+function getVendorMgmtCategoryOptions(rows) {
+  if (typeof getGovStageCategoryOptions === 'function') {
+    return getGovStageCategoryOptions(rows || []);
+  }
+  const cats = [...new Set((rows || []).map(r => r.category).filter(Boolean))];
+  return ['All categories', ...cats];
+}
+
+function applyVendorMgmtCategoryFilter(rows, filterState) {
+  let list = Array.isArray(rows) ? rows.slice() : [];
+  const cat = filterState?.category;
+  if (cat && cat !== 'all') {
+    list = list.filter(r => r.category === cat);
+  } else if (typeof currentCategory !== 'undefined' && currentCategory && currentCategory !== 'All') {
+    list = list.filter(r => r.category === currentCategory);
+  }
+  return list;
+}
+
+function renderVendorMgmtCategoryFilter(selectId, options, filterState) {
+  const selected = (!filterState.category || filterState.category === 'all') ? 'All categories' : filterState.category;
+  return `<div class="bid-records-category-filter" title="Filter by category">
+    <span class="bid-records-category-label">Category</span>
+    ${typeof inlineCustomSelectHTML === 'function'
+      ? inlineCustomSelectHTML(selectId, options, selected)
+      : ''}
+  </div>`;
+}
+
+function getAiEligVendorCategoryOptions() {
+  return getVendorMgmtCategoryOptions(typeof AI_ELIGIBLE_VENDOR_QUEUE !== 'undefined' ? AI_ELIGIBLE_VENDOR_QUEUE : []);
+}
+
+function getAiEligibleVendorRows() {
+  const seed = typeof AI_ELIGIBLE_VENDOR_QUEUE !== 'undefined' ? AI_ELIGIBLE_VENDOR_QUEUE : [];
+  return applyVendorMgmtCategoryFilter(seed, aiEligVendorState)
+    .map(r => ({ ...r, score: parseVendorMgmtScore(r) }))
+    .sort((a, b) => b.score - a.score);
+}
+
+function getVendorMgmtProfileRows() {
+  const seed = typeof VENDOR_MGMT_PROFILES !== 'undefined' ? VENDOR_MGMT_PROFILES : [];
+  return applyVendorMgmtCategoryFilter(seed, vendorProfileFilterState)
+    .slice()
+    .sort((a, b) => parseVendorMgmtScore(b) - parseVendorMgmtScore(a));
+}
+
+function getSelfOnboardRows() {
+  const seed = typeof VENDOR_REGISTRATIONS !== 'undefined' ? VENDOR_REGISTRATIONS : [];
+  return applyVendorMgmtCategoryFilter(seed, selfOnboardFilterState);
+}
+
+function setAiEligVendorCategory(label) {
+  aiEligVendorState.category = (!label || label === 'All categories') ? 'all' : label;
+  aiEligVendorState.page = 1;
+  if (typeof renderPageContent === 'function') renderPageContent();
+}
+
+function setAiEligVendorPage(page) {
+  aiEligVendorState.page = Math.max(1, Number(page) || 1);
+  if (typeof renderPageContent === 'function') renderPageContent();
+}
+
+function setVendorProfileCategory(label) {
+  vendorProfileFilterState.category = (!label || label === 'All categories') ? 'all' : label;
+  if (typeof vendorRegListPage !== 'undefined') vendorRegListPage = 1;
+  if (typeof renderPageContent === 'function') renderPageContent();
+}
+
+function setSelfOnboardCategory(label) {
+  selfOnboardFilterState.category = (!label || label === 'All categories') ? 'all' : label;
+  selfOnboardFilterState.page = 1;
+  if (typeof renderPageContent === 'function') renderPageContent();
+}
+
+function setSelfOnboardPage(page) {
+  selfOnboardFilterState.page = Math.max(1, Number(page) || 1);
+  if (typeof renderPageContent === 'function') renderPageContent();
+}
+
+function bindAiEligVendorCategorySelect() {
+  if (typeof bindGovStageCategorySelect !== 'function') return;
+  bindGovStageCategorySelect('aiEligVendorCategory', setAiEligVendorCategory);
+  bindGovStageCategorySelect('vendorProfileCategory', setVendorProfileCategory);
+  bindGovStageCategorySelect('selfOnboardCategory', setSelfOnboardCategory);
+}
+
 function renderVendorReg() {
-  const profiles = filterByCategory(typeof VENDOR_MGMT_PROFILES !== 'undefined' ? VENDOR_MGMT_PROFILES : []);
+  const profiles = getVendorMgmtProfileRows();
   const paged = paginateItems(profiles, vendorRegListPage, 10);
   vendorRegListPage = paged.page;
-  const aiQueue = typeof AI_ELIGIBLE_VENDOR_QUEUE !== 'undefined' ? AI_ELIGIBLE_VENDOR_QUEUE : [];
-  const regs = typeof VENDOR_REGISTRATIONS !== 'undefined' ? filterByCategory(VENDOR_REGISTRATIONS) : [];
+  const aiRows = getAiEligibleVendorRows();
+  const aiPaged = paginateItems(aiRows, aiEligVendorState.page, 10);
+  aiEligVendorState.page = aiPaged.page;
+  const regs = getSelfOnboardRows();
+  const regsPaged = paginateItems(regs, selfOnboardFilterState.page, 10);
+  selfOnboardFilterState.page = regsPaged.page;
+  const profileCategoryOptions = getVendorMgmtCategoryOptions(
+    typeof VENDOR_MGMT_PROFILES !== 'undefined' ? VENDOR_MGMT_PROFILES : []
+  );
+  const selfCategoryOptions = getVendorMgmtCategoryOptions(
+    typeof VENDOR_REGISTRATIONS !== 'undefined' ? VENDOR_REGISTRATIONS : []
+  );
+  const aiCategoryOptions = getAiEligVendorCategoryOptions();
 
   return `<div class="vendor-mgmt-page">
     <div class="indent-mode-banner">
@@ -373,10 +486,10 @@ function renderVendorReg() {
     </div>
 
     <div class="budget-pr-summary">
-      <div class="budget-pr-chip"><span>Synced profiles</span><strong>${profiles.length}</strong></div>
-      <div class="budget-pr-chip"><span>Suppliers</span><strong>${profiles.filter(p => p.type === 'Supplier').length}</strong></div>
-      <div class="budget-pr-chip"><span>Authorised labs</span><strong>${profiles.filter(p => p.type === 'Authorised Laboratory').length}</strong></div>
-      <div class="budget-pr-chip"><span>AI eligibility queue</span><strong>${aiQueue.length}</strong></div>
+      <div class="budget-pr-chip"><span>Synced profiles</span><strong>${(typeof VENDOR_MGMT_PROFILES !== 'undefined' ? VENDOR_MGMT_PROFILES : []).length}</strong></div>
+      <div class="budget-pr-chip"><span>Suppliers</span><strong>${(typeof VENDOR_MGMT_PROFILES !== 'undefined' ? VENDOR_MGMT_PROFILES : []).filter(p => p.type === 'Supplier').length}</strong></div>
+      <div class="budget-pr-chip"><span>Authorised labs</span><strong>${(typeof VENDOR_MGMT_PROFILES !== 'undefined' ? VENDOR_MGMT_PROFILES : []).filter(p => p.type === 'Authorised Laboratory').length}</strong></div>
+      <div class="budget-pr-chip"><span>AI eligibility queue</span><strong>${(typeof AI_ELIGIBLE_VENDOR_QUEUE !== 'undefined' ? AI_ELIGIBLE_VENDOR_QUEUE : []).length}</strong></div>
     </div>
 
     <section class="budget-section">
@@ -384,28 +497,33 @@ function renderVendorReg() {
         <h4><i class="fa-solid fa-robot"></i> AI — identify eligible vendors &amp; market intelligence</h4>
         <p>Proposed AI/ML shortlist. Resource Manager confirms onboard only — no blank registration forms for known NIC vendors.</p>
       </div>
-      <div class="data-table-wrap">
+      <div class="data-table-wrap need-table">
+        <div class="table-header bid-records-header">
+          <h3>AI eligibility shortlist</h3>
+          ${renderVendorMgmtCategoryFilter('aiEligVendorCategory', aiCategoryOptions, aiEligVendorState)}
+        </div>
         <table class="data-table">
-          <thead><tr><th>ID</th><th>Vendor</th><th>Type</th><th>Category</th><th>AI reason</th><th>Confidence</th><th>Action</th></tr></thead>
+          <thead><tr><th>ID</th><th>Vendor</th><th>Type</th><th>Category</th><th>AI reason</th><th>Score</th><th>Action</th></tr></thead>
           <tbody>
-            ${aiQueue.map(q => `<tr>
+            ${aiPaged.items.length ? aiPaged.items.map(q => `<tr>
               <td><strong>${q.id}</strong></td>
               <td>${q.name}</td>
               <td>${q.type}</td>
               <td>${q.category}</td>
               <td>${q.reason}</td>
-              <td><span class="badge badge-success">${q.confidence}</span></td>
-              <td><button type="button" class="btn btn-primary" style="padding:0.3rem 0.6rem;font-size:0.75rem" onclick="confirmAiVendorOnboard('${q.id}')">${q.action}</button></td>
-            </tr>`).join('')}
+              <td><strong>${formatVendorMgmtScore(q)}</strong></td>
+              <td><button type="button" class="btn btn-primary vm-table-action-btn" onclick="confirmAiVendorOnboard('${q.id}')">${q.action}</button></td>
+            </tr>`).join('') : `<tr class="table-filter-empty-row"><td colspan="7"><div class="table-filter-empty"><i class="fa-solid fa-filter"></i><p>No AI-eligible vendors${aiEligVendorState.category !== 'all' ? ` for <strong>${aiEligVendorState.category}</strong>` : ''}.</p><button type="button" class="btn btn-outline btn-sm" onclick="setAiEligVendorCategory('All categories')">Clear category filter</button></div></td></tr>`}
           </tbody>
         </table>
+        ${aiPaged.items.length ? renderPaginationControls(aiPaged.page, aiPaged.totalPages, aiPaged.total, aiPaged.from, aiPaged.to, 'setAiEligVendorPage') : ''}
       </div>
     </section>
 
-    <div class="data-table-wrap mt-2">
-      <div class="table-header">
+    <div class="data-table-wrap mt-2 need-table">
+      <div class="table-header bid-records-header">
         <h3>Vendor profiles (NIC → DVDMS → portal)</h3>
-        <span class="meta-chip" style="margin:0"><strong>${paged.total}</strong> shown</span>
+        ${renderVendorMgmtCategoryFilter('vendorProfileCategory', profileCategoryOptions, vendorProfileFilterState)}
       </div>
       <table class="data-table">
         <thead>
@@ -428,32 +546,33 @@ function renderVendorReg() {
               <td>${v.category}</td>
               <td>${v.dsc}<div class="table-sub">${v.empanelmentFee}</div></td>
               <td><span class="badge badge-${v.dvdmsSync === 'Synced' ? 'success' : 'warning'}">${v.dvdmsSync}</span></td>
-              <td><strong>${v.score}</strong></td>
+              <td><strong>${formatVendorMgmtScore(v)}</strong></td>
               <td>${v.eligibility}</td>
-              <td><button class="btn btn-primary" style="padding:0.3rem 0.6rem;font-size:0.75rem" onclick="event.stopPropagation();openVendorMgmtDetail('${v.id}')">View</button></td>
-            </tr>`).join('') : emptyTableRow(8)}
+              <td><button type="button" class="btn btn-primary vm-table-action-btn" onclick="event.stopPropagation();openVendorMgmtDetail('${v.id}')">View</button></td>
+            </tr>`).join('') : `<tr class="table-filter-empty-row"><td colspan="8"><div class="table-filter-empty"><i class="fa-solid fa-filter"></i><p>No vendor profiles${vendorProfileFilterState.category !== 'all' ? ` for <strong>${vendorProfileFilterState.category}</strong>` : ''}.</p><button type="button" class="btn btn-outline btn-sm" onclick="setVendorProfileCategory('All categories')">Clear category filter</button></div></td></tr>`}
         </tbody>
       </table>
-      ${renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setVendorRegListPage')}
+      ${paged.items.length ? renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setVendorRegListPage') : ''}
     </div>
 
-    ${regs.length ? `<div class="data-table-wrap mt-2">
-      <div class="table-header">
+    <div class="data-table-wrap mt-2 need-table">
+      <div class="table-header bid-records-header">
         <h3>Self-onboarding / document validation queue</h3>
-        <span class="meta-chip" style="margin:0">Upload &amp; validate — master fields remain NIC/DVDMS sourced</span>
+        ${renderVendorMgmtCategoryFilter('selfOnboardCategory', selfCategoryOptions, selfOnboardFilterState)}
       </div>
       <table class="data-table">
         <thead><tr><th>Request</th><th>Company</th><th>Category</th><th>KYC</th><th>Docs</th><th>Action</th></tr></thead>
         <tbody>
-          ${regs.slice(0, 5).map(r => `<tr onclick="openVendorRegEmpanelmentDetail('${r.id}')">
+          ${regsPaged.items.length ? regsPaged.items.map(r => `<tr onclick="openVendorRegEmpanelmentDetail('${r.id}')">
             <td><strong>${r.id}</strong></td><td>${r.name}</td><td>${r.category}</td>
             <td><span class="badge badge-${kycBadgeClass(r.kyc)}">${r.kyc}</span></td>
             <td>${r.documents}</td>
-            <td><button class="btn btn-outline" style="padding:0.3rem 0.6rem;font-size:0.75rem" onclick="event.stopPropagation();openVendorRegEmpanelmentDetail('${r.id}')">Validate</button></td>
-          </tr>`).join('')}
+            <td><button type="button" class="btn btn-outline vm-table-action-btn" onclick="event.stopPropagation();openVendorRegEmpanelmentDetail('${r.id}')">Validate</button></td>
+          </tr>`).join('') : `<tr class="table-filter-empty-row"><td colspan="6"><div class="table-filter-empty"><i class="fa-solid fa-filter"></i><p>No self-onboarding requests${selfOnboardFilterState.category !== 'all' ? ` for <strong>${selfOnboardFilterState.category}</strong>` : ''}.</p><button type="button" class="btn btn-outline btn-sm" onclick="setSelfOnboardCategory('All categories')">Clear category filter</button></div></td></tr>`}
         </tbody>
       </table>
-    </div>` : ''}
+      ${regsPaged.items.length ? renderPaginationControls(regsPaged.page, regsPaged.totalPages, regsPaged.total, regsPaged.from, regsPaged.to, 'setSelfOnboardPage') : ''}
+    </div>
   </div>`;
 }
 

@@ -4012,6 +4012,9 @@ function finishPageInit() {
   if (currentPage === 'repository' && currentRole === 'vendor') {
     bindVendorRepositoryFilters();
   }
+  if (currentPage === 'vendor-reg') {
+    if (typeof bindAiEligVendorCategorySelect === 'function') bindAiEligVendorCategorySelect();
+  }
   if (currentPage === 'workflow' && currentRole === 'gov') {
     scheduleStageSlaCheck(currentWorkflowStep);
   }
@@ -4542,11 +4545,12 @@ function computeVendorOverallScore(vendor) {
 }
 
 function adjustVendorScores(vendor, factor) {
-  if (factor === 1) return vendor;
-  const adj = v => Math.min(100, Math.max(1, Math.round(v * factor * 10) / 10));
+  const f = Number(factor) || 1;
+  const adj = v => Math.min(100, Math.max(1, Math.round(v * f * 10) / 10));
   const next = { ...vendor };
   (typeof PERF_METRICS !== 'undefined' ? PERF_METRICS : []).forEach(m => {
-    next[m.key] = adj(Number(vendor[m.key]) || 0);
+    const raw = Number(vendor[m.key]) || 0;
+    next[m.key] = f === 1 ? raw : adj(raw);
   });
   next.overall = computeVendorOverallScore(next);
   return next;
@@ -4554,7 +4558,18 @@ function adjustVendorScores(vendor, factor) {
 
 function getAnalyticsAdjustedVendors(vendors) {
   const factor = getAnalyticsScoreFactor();
-  return vendors.map(v => adjustVendorScores(v, factor));
+  return (vendors || []).map(v => adjustVendorScores(v, factor));
+}
+
+function getVendorMetricPoints(vendor, metric) {
+  return Math.max(0, Math.min(100, Number(vendor?.[metric?.key]) || 0));
+}
+
+function getVendorMetricBarTone(points) {
+  const p = Number(points) || 0;
+  if (p >= 85) return 'high';
+  if (p >= 70) return 'mid';
+  return 'low';
 }
 
 function refreshDashboardVendorTable() {
@@ -4798,17 +4813,23 @@ function renderVendorDashboard() {
 function renderVendorTableRows(vendors) {
   const metrics = typeof PERF_METRICS !== 'undefined' ? PERF_METRICS : [];
   const colSpan = 3 + metrics.length + 2;
-  return vendors.length ? vendors.map(v => `<tr onclick="openVendorDetail('${v.id}')">
+  return vendors.length ? vendors.map(v => {
+    const overall = computeVendorOverallScore(v);
+    return `<tr onclick="openVendorDetail('${v.id}')">
     <td><strong>${v.id}</strong></td>
     <td>${v.name}</td>
     <td>${v.category}</td>
     ${metrics.map(m => {
-      const s = Number(v[m.key]) || 0;
-      return `<td><div class="score-bar"><div class="score-track"><div class="score-fill ${s >= 85 ? 'high' : s >= 70 ? 'mid' : 'low'}" style="width:${s}%"></div></div><span>${s}</span></div></td>`;
+      const points = getVendorMetricPoints(v, m);
+      // Same Performance vs Benchmark rule: bar = measured level, number = points toward score.
+      const barPct = getPerfMetricBarValue(m, points);
+      const tone = getVendorMetricBarTone(points);
+      return `<td><div class="score-bar"><div class="score-track"><div class="score-fill ${tone}" style="width:${barPct}%"></div></div><span>${points}</span></div></td>`;
     }).join('')}
-    <td><strong>${v.overall}</strong></td>
+    <td><strong>${overall}</strong></td>
     <td><span class="badge badge-${v.status === 'Preferred' ? 'success' : v.status === 'Watch' ? 'danger' : 'info'}">${v.status}</span></td>
-  </tr>`).join('') : emptyTableRow(colSpan);
+  </tr>`;
+  }).join('') : emptyTableRow(colSpan);
 }
 
 function renderVendorTable(options = {}) {
@@ -13621,12 +13642,6 @@ function renderSourcing() {
           </tr>`).join('') : emptyTableRow(8, 'No payment delays for this category.')}
         </tbody>
       </table>
-    </div>
-
-    <div class="wf-detail mt-2">
-      <h3>Weighted Vendor Recommendation</h3>
-      <p>Selected vendor receives explainable weighted score. Blacklisted/expired/non-compliant bidders auto-blocked. Score weights match Analytics Vendor Performance Matrix.</p>
-      <div class="score-weights">${SCORE_WEIGHTS.map(w => `<div class="weight-card"><div class="weight-pct">${w.weight}%</div><div class="weight-label">${w.label}</div></div>`).join('')}</div>
     </div>`;
 }
 
@@ -19628,6 +19643,17 @@ function setCategory(cat) {
   pipelinePage = 1;
   workQueuePage = 1;
   vendorRegListPage = 1;
+  if (typeof aiEligVendorState !== 'undefined') {
+    aiEligVendorState.page = 1;
+    aiEligVendorState.category = 'all';
+  }
+  if (typeof selfOnboardFilterState !== 'undefined') {
+    selfOnboardFilterState.page = 1;
+    selfOnboardFilterState.category = 'all';
+  }
+  if (typeof vendorProfileFilterState !== 'undefined') {
+    vendorProfileFilterState.category = 'all';
+  }
   vendorMatrixPage = 1;
   resetWfStageTablePages(govNeedState);
   resetWfStageTablePages(govStockCheckState);
@@ -20663,13 +20689,17 @@ function openChartPeriodDetail(seriesLabel, periodLabel) {
 }
 
 function openVendorDetail(id) {
-  const v = VENDORS.find(x => x.id === id);
-  if (!v) return;
+  const raw = VENDORS.find(x => x.id === id);
+  if (!raw) return;
+  const v = adjustVendorScores(raw, getAnalyticsScoreFactor());
   const metrics = typeof PERF_METRICS !== 'undefined' ? PERF_METRICS : [];
   openModal(`${v.id} — ${v.name}`, `<div class="drill-simple">
     <p><strong>Overall Score:</strong> ${v.overall} · <strong>Status:</strong> ${v.status} · <strong>Category:</strong> ${v.category}</p>
     <div class="tender-detail-stats mt-2">
-      ${metrics.map(m => `<div class="tender-stat"><span>${escapeHtmlLite(m.label)}</span><strong>${v[m.key] ?? '—'}</strong></div>`).join('')}
+      ${metrics.map(m => {
+        const points = getVendorMetricPoints(v, m);
+        return `<div class="tender-stat"><span>${escapeHtmlLite(m.label)}</span><strong>${points}</strong></div>`;
+      }).join('')}
     </div>
   </div>`, { wide: true });
 }

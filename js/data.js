@@ -1683,10 +1683,10 @@ const VENDOR_MGMT_PROFILES = [
 ];
 
 const AI_ELIGIBLE_VENDOR_QUEUE = [
-  { id: 'AI-ELIG-01', name: 'Sunrise Pharma Ltd', category: 'Drugs', type: 'Supplier', reason: 'Market intelligence: EDL alternate · GSTIN match · no blacklist', confidence: '94%', action: 'Confirm onboard' },
-  { id: 'AI-ELIG-02', name: 'OncoCare Pharma QC Lab', category: 'Drugs', type: 'Authorised Laboratory', reason: 'NABL + cold-chain COA capacity for oncology lots', confidence: '91%', action: 'Confirm QC empanel' },
-  { id: 'AI-ELIG-03', name: 'GenericMed Corp', category: 'Drugs', type: 'Supplier', reason: 'Price intelligence below RC band · docs incomplete', confidence: '68%', action: 'Request docs' },
-  { id: 'AI-ELIG-04', name: 'CloudCare Systems', category: 'Services', type: 'Supplier', reason: 'HMIS / telemedicine capability match open RFPs', confidence: '86%', action: 'Confirm onboard' }
+  { id: 'AI-ELIG-01', name: 'Sunrise Pharma Ltd', category: 'Drugs', type: 'Supplier', reason: 'Market intelligence: EDL alternate · GSTIN match · no blacklist', score: 94, action: 'Confirm onboard' },
+  { id: 'AI-ELIG-02', name: 'OncoCare Pharma QC Lab', category: 'Drugs', type: 'Authorised Laboratory', reason: 'NABL + cold-chain COA capacity for oncology lots', score: 91, action: 'Confirm QC' },
+  { id: 'AI-ELIG-03', name: 'GenericMed Corp', category: 'Drugs', type: 'Supplier', reason: 'Price intelligence below RC band · docs incomplete', score: 68, action: 'Request docs' },
+  { id: 'AI-ELIG-04', name: 'CloudCare Systems', category: 'Services', type: 'Supplier', reason: 'HMIS / telemedicine capability match open RFPs', score: 86, action: 'Confirm onboard' }
 ];
 
 const CLARIFICATIONS = [

@@ -10062,3 +10062,17 @@ tr.is-active-contract-row td {
 .vendor-mgmt-page .budget-pr-summary {
   margin-top: 0.85rem;
 }
+
+.vendor-mgmt-page .vm-table-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 8.75rem;
+  height: 2rem;
+  padding: 0 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
