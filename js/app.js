@@ -19,7 +19,6 @@ let modalHistory = [];
 let tenderStatusFilter = 'all'; // 'all' | 'open' | 'evaluation' | 'draft'
 let pipelinePage = 1;
 const PIPELINE_PAGE_SIZE = 10;
-let noticesShownThisSession = false;
 let workQueueFilter = 'all';
 let activeSlaThreadId = 'SLA-2026-014';
 
@@ -3070,13 +3069,16 @@ const govContractState = {
   year: 'all',
   viewBy: 'quarter',
   period: 'all',
-  approvals: {} // contractId -> saved form decision
+  approvals: {}, // contractId -> saved form decision
+  pbgRecords: {} // contractId -> { status, amount, ref, bank, receivedOn, recordedBy, remarks }
 };
 const govAwardState = { page: 1, category: 'all', year: 'all', viewBy: 'quarter', period: 'all' };
 const govPoState = { page: 1, category: 'all', year: 'all', viewBy: 'quarter', period: 'all' };
 const govGrnState = { page: 1, category: 'all', year: 'all', viewBy: 'quarter', period: 'all' };
 const govInvoiceState = { page: 1, category: 'all', year: 'all', viewBy: 'quarter', period: 'all' };
 const govPaymentState = { page: 1, category: 'all', year: 'all', viewBy: 'quarter', period: 'all' };
+const govLoaState = { page: 1, category: 'all', year: 'all', viewBy: 'quarter', period: 'all', issued: {} };
+const govQcState = { page: 1, category: 'all', year: 'all', viewBy: 'quarter', period: 'all', statuses: {} };
 const govRenewalState = {
   page: 1,
   category: 'all',
@@ -3093,7 +3095,7 @@ let govSequentialCommitted = false;
 let govLifecycleComplete = false;
 let vendorLifecycleComplete = false;
 
-const GOV_LIFECYCLE_STORAGE_VERSION = 1;
+const GOV_LIFECYCLE_STORAGE_VERSION = 2;
 const GOV_LIFECYCLE_STORAGE_PREFIX = 'mph_gov_lifecycle_v1_';
 
 function getGovLifecycleStorageKey(user = authUser) {
@@ -3113,42 +3115,63 @@ function overwritePlainObject(target, source) {
   Object.assign(target, clonePlain(source));
 }
 
-/** CMVPMS (gov workflow) starts at Contract Approval — Stages 1–7 are locked in the sidebar flow. */
+/** CMVPMS (gov workflow) starts at LOA Issuance — Stages 1–7 are locked in the sidebar flow. */
 const GOV_CMVPMS_MIN_STAGE = 8;
+const GOV_CMVPMS_MAX_STAGE = 15;
+
+function getGovWorkflowTotal() {
+  return (typeof GOV_WORKFLOW !== 'undefined' && GOV_WORKFLOW.length)
+    ? GOV_WORKFLOW.length
+    : GOV_CMVPMS_MAX_STAGE;
+}
+
+function isBudgetOfficer() {
+  if (currentRole !== 'gov') return false;
+  const title = String(authUser?.title || '');
+  const email = String(authUser?.email || '');
+  return /Budget Officer/i.test(title)
+    || /finance/i.test(title)
+    || /^budget@/i.test(email);
+}
+
+function isResourceManagerDesk() {
+  return currentRole === 'gov' && !isBudgetOfficer();
+}
 
 function isGovCmvpmsLockedStage(id) {
   return currentRole === 'gov' && Number(id) >= 1 && Number(id) < GOV_CMVPMS_MIN_STAGE;
 }
 
 function getGovActiveStageId() {
-  if (govLifecycleComplete) return 14;
-  // Early jump to Renewal from Stage 8 — keep 14 as the viewed/active focus without marking 9–13 done
-  if (currentWorkflowStep === 14 && !govSequentialCommitted) return 14;
+  const total = getGovWorkflowTotal();
+  if (govLifecycleComplete) return total;
+  // Early jump to Renewal from Stage 8
+  if (currentWorkflowStep === total && !govSequentialCommitted) return total;
 
-  // CMVPMS: Stages 1–7 are locked out of scope. Progress tracks 8–14 from the current view
-  // (early indent/budget/tender gates are not required to work Stages 8+).
+  // CMVPMS: Stages 1–7 are locked. Progress tracks 8–total from the current view.
   const step = Number(currentWorkflowStep) || GOV_CMVPMS_MIN_STAGE;
-  return Math.min(Math.max(step, GOV_CMVPMS_MIN_STAGE), 14);
+  return Math.min(Math.max(step, GOV_CMVPMS_MIN_STAGE), total);
 }
 
-/** Step to resume on next open — never a future preview (e.g. clicked Award while still on Indent). */
+/** Step to resume on next open — never a future preview. */
 function getGovResumeStep() {
-  if (currentWorkflowStep === 14 && !govSequentialCommitted) return 14;
+  const total = getGovWorkflowTotal();
+  if (currentWorkflowStep === total && !govSequentialCommitted) return total;
   const progress = getGovActiveStageId();
   const step = Number(currentWorkflowStep) || progress || GOV_CMVPMS_MIN_STAGE;
   if (step > progress) return progress;
-  return Math.max(GOV_CMVPMS_MIN_STAGE, Math.min(14, step));
+  return Math.max(GOV_CMVPMS_MIN_STAGE, Math.min(total, step));
 }
 
 function syncGovWorkflowStatuses() {
   if (typeof GOV_WORKFLOW === 'undefined') return;
   if (currentRole && currentRole !== 'gov') return;
 
-  // Special case: Stage 8 → 14 jump (sequential path not started)
-  if (currentWorkflowStep === 14 && !govSequentialCommitted && !govLifecycleComplete) {
+  // Special case: Stage 8 → last jump (sequential path not started)
+  if (currentWorkflowStep === getGovWorkflowTotal() && !govSequentialCommitted && !govLifecycleComplete) {
     GOV_WORKFLOW.forEach(s => {
       if (s.id === GOV_CMVPMS_MIN_STAGE) s.status = 'done';
-      else if (s.id === 14) s.status = 'active';
+      else if (s.id === getGovWorkflowTotal()) s.status = 'active';
       else s.status = 'pending';
     });
     return;
@@ -3176,6 +3199,8 @@ function buildGovLifecycleSnapshot() {
     tenderPrep: clonePlain(govTenderPrepState),
     bidEval: clonePlain(govBidEvalState),
     contract: clonePlain(govContractState),
+    loa: clonePlain(govLoaState),
+    qc: clonePlain(govQcState),
     award: clonePlain(govAwardState),
     po: clonePlain(govPoState),
     grn: clonePlain(govGrnState),
@@ -3279,7 +3304,13 @@ function resetGovLifecycleInMemory() {
   });
   overwritePlainObject(govBidEvalState, { page: 1, category: 'all', year: 'all', viewBy: 'quarter', period: 'all' });
   overwritePlainObject(govContractState, {
-    page: 1, category: 'all', year: 'all', viewBy: 'quarter', period: 'all', approvals: {}
+    page: 1, category: 'all', year: 'all', viewBy: 'quarter', period: 'all', approvals: {}, pbgRecords: {}
+  });
+  overwritePlainObject(govLoaState, {
+    page: 1, category: 'all', year: 'all', viewBy: 'quarter', period: 'all', issued: {}
+  });
+  overwritePlainObject(govQcState, {
+    page: 1, category: 'all', year: 'all', viewBy: 'quarter', period: 'all', statuses: {}
   });
   overwritePlainObject(govAwardState, { page: 1, category: 'all', year: 'all', viewBy: 'quarter', period: 'all' });
   overwritePlainObject(govPoState, { page: 1, category: 'all', year: 'all', viewBy: 'quarter', period: 'all' });
@@ -3318,6 +3349,12 @@ function applyGovLifecycleSnapshot(saved) {
   if (!govBidEvalState.category) govBidEvalState.category = 'all';
   if (saved.contract) overwritePlainObject(govContractState, saved.contract);
   if (!govContractState.category) govContractState.category = 'all';
+  if (!govContractState.approvals) govContractState.approvals = {};
+  if (!govContractState.pbgRecords) govContractState.pbgRecords = {};
+  if (saved.loa) overwritePlainObject(govLoaState, saved.loa);
+  if (!govLoaState.issued) govLoaState.issued = {};
+  if (saved.qc) overwritePlainObject(govQcState, saved.qc);
+  if (!govQcState.statuses) govQcState.statuses = {};
   if (saved.award) overwritePlainObject(govAwardState, saved.award);
   if (!govAwardState.category) govAwardState.category = 'all';
   if (saved.po) overwritePlainObject(govPoState, saved.po);
@@ -3334,7 +3371,7 @@ function applyGovLifecycleSnapshot(saved) {
   govLifecycleComplete = !!saved.lifecycleComplete;
   currentWorkflowStep = Math.max(
     GOV_CMVPMS_MIN_STAGE,
-    Math.min(14, Number(saved.currentStep) || GOV_CMVPMS_MIN_STAGE)
+    Math.min(getGovWorkflowTotal(), Number(saved.currentStep) || GOV_CMVPMS_MIN_STAGE)
   );
   syncGovWorkflowStatuses();
   // Never land on a future preview stage after restore (e.g. Award while still on Need/Indent).
@@ -3462,7 +3499,6 @@ function daysUntilDeadline(deadline) {
 function completeAuthLogin(role, user) {
   currentRole = role;
   authUser = user;
-  closeNoticeModal();
   const app = document.getElementById('app');
   app.classList.add('active');
   app.classList.toggle('gov-app', role === 'gov');
@@ -3519,8 +3555,6 @@ function logout() {
   clearInMemoryVendorLifecycle();
   resetGovLifecycleInMemory();
   pageStack = [];
-  noticesShownThisSession = false;
-  resetGovNoticesForDemo();
   document.getElementById('app').classList.remove('active', 'gov-app', 'vendor-app');
   const authPage = document.getElementById('authPage');
   if (authPage) {
@@ -3530,19 +3564,7 @@ function logout() {
   if (typeof clearAuthSession === 'function') clearAuthSession();
   if (typeof initAuth === 'function') initAuth();
   closeAlertPanel();
-  closeNoticeModal();
   closeModal();
-  // Show official notices again on the login screen
-  requestAnimationFrame(() => {
-    setTimeout(() => showGovNoticesOnWebsiteLoad(true), 400);
-  });
-}
-
-function resetGovNoticesForDemo() {
-  if (typeof GOV_NOTICES === 'undefined') return;
-  GOV_NOTICES.forEach(n => {
-    n.unread = n.id !== 'GN-2026-029';
-  });
 }
 
 // ========== NAVIGATION ==========
@@ -3693,7 +3715,7 @@ function renderTopbar() {
       : ['Communication', 'Escalate and resolve issues with government officers as per SLA hierarchy'],
     workflow: currentRole === 'vendor'
       ? ['Source-to-Pay', '']
-      : ['CMVPMS', 'Contract Approval → Award → PO → GRN → Payment · Stages 8–14'],
+      : ['CMVPMS', 'LOA → Contract & PBG → Approval → Award → QC → Invoice · Stages 8–15'],
     'contract-mgmt': ['Contract Management', 'DVDMS / NIC synced register — LOI → PBG → draft → signed → supply · AI/ML for alerts'],
     'vendor-reg': ['Vendor Management', 'NIC registration façade + DVDMS sync — AI eligibility & scorecard (no duplicate master forms)'],
     sourcing: ['Sourcing & Award', 'Evaluation through award — aligns with Stages 7–9'],
@@ -4279,11 +4301,12 @@ function renderPerformanceBreakdown(vendor) {
           const deltaClass = m.delta > 0 ? 'up' : m.delta < 0 ? 'down' : 'neutral';
           const deltaText = m.delta > 0 ? `+${m.delta}` : m.delta === 0 ? '0' : String(m.delta);
           const deltaHint = m.delta > 0 ? 'Above standard' : m.delta < 0 ? 'Below standard' : 'Meets standard';
-          return `<div class="score-compare-row" style="--metric-color:${m.color}">
+          return `<div class="score-compare-row score-compare-row--clickable" role="button" tabindex="0" style="--metric-color:${m.color}" title="View ${m.label} justification" onclick="openVendorDetail('${vendor.id}','${m.key}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openVendorDetail('${vendor.id}','${m.key}')}">
             <div class="score-row-label">
               <span class="score-row-icon"><i class="fa-solid ${m.icon}"></i></span>
               <div class="score-row-text">
                 <span class="score-row-name">${m.label}</span>
+                <span class="score-row-hint">Tap to verify</span>
               </div>
             </div>
             <div class="score-row-visual" title="Measured ${m.label}: ${m.barValue}">
@@ -4300,6 +4323,11 @@ function renderPerformanceBreakdown(vendor) {
           </div>`;
         }).join('')}
         </div>
+      </div>
+      <div class="perf-verify-cta">
+        <button type="button" class="btn btn-outline" onclick="openVendorDetail('${vendor.id}')">
+          <i class="fa-solid fa-clipboard-check"></i> View full score justification
+        </button>
       </div>
     </div>
   </div>`;
@@ -4819,7 +4847,7 @@ function renderVendorTableRows(vendors) {
   const colSpan = 3 + metrics.length + 2;
   return vendors.length ? vendors.map(v => {
     const overall = computeVendorOverallScore(v);
-    return `<tr onclick="openVendorDetail('${v.id}')">
+    return `<tr class="need-row-clickable" role="button" tabindex="0" title="View metric justifications" onclick="openVendorDetail('${v.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openVendorDetail('${v.id}')}">
     <td><strong>${v.id}</strong></td>
     <td>${v.name}</td>
     <td>${v.category}</td>
@@ -4844,7 +4872,13 @@ function renderVendorTable(options = {}) {
   const metrics = typeof PERF_METRICS !== 'undefined' ? PERF_METRICS : [];
   const colSpan = 3 + metrics.length + 2;
   return `<div class="data-table-wrap"${tableId ? ` id="${tableId}"` : ''}>
-    <div class="table-header"><h3>Vendor Performance Matrix ${currentCategory !== 'All' ? `— ${currentCategory}` : ''}</h3>${showNavButton ? `<button class="btn btn-outline" onclick="navigateTo('vendor-matrix')">Full Matrix →</button>` : ''}</div>
+    <div class="table-header">
+      <div>
+        <h3>Vendor Performance Matrix ${currentCategory !== 'All' ? `— ${currentCategory}` : ''}</h3>
+        <p class="table-header-hint">Click a row to verify how each metric score was calculated</p>
+      </div>
+      ${showNavButton ? `<button class="btn btn-outline" onclick="navigateTo('vendor-matrix')">Full Matrix →</button>` : ''}
+    </div>
     <table class="data-table">
       <thead><tr><th>Vendor ID</th><th>Name</th><th>Category</th>${metrics.map(m => `<th>${escapeHtmlLite(m.label)}</th>`).join('')}<th>Overall</th><th>Status</th></tr></thead>
       <tbody>
@@ -4929,7 +4963,7 @@ function renderWorkflow() {
 
   return `
     <div class="wf-page-header">
-      <p class="wf-page-hint">${isGov ? 'CMVPMS · Stages 1–7 locked · starts at Contract Approval (8) · progress saved automatically · from Stage 8 you may still jump to Renewal (14)' : '10 stages · progress is saved automatically — you resume where you left off'}</p>
+      <p class="wf-page-hint">${isGov ? 'CMVPMS · Stages 1–7 locked · starts at LOA Issuance (8) · PBG & Contract Approval by Budget Officer · progress saved · from Stage 8 you may jump to Renewal (15)' : '10 stages · progress is saved automatically — you resume where you left off'}</p>
     </div>
     <div class="workflow-timeline" role="tablist" aria-label="CMVPMS stages">
       ${steps.map(s => {
@@ -4948,18 +4982,19 @@ function renderWorkflow() {
 }
 
 function renderWorkflowViewBanner(step, progress) {
-  if (currentRole === 'gov' && step.id === 14) {
+  const govTotal = getGovWorkflowTotal();
+  if (currentRole === 'gov' && step.id === govTotal) {
     if (!govSequentialCommitted) {
       return `<div class="wf-view-banner wf-view-banner--past">
         <i class="fa-solid fa-bolt"></i>
-        <span>Opened <strong>Renewal (Stage 14)</strong> directly from Stage 8. Finalize renewals here, or return to Contract Approval to continue CMVPMS.</span>
+        <span>Opened <strong>Renewal (Stage ${govTotal})</strong> directly from Stage 8. Finalize renewals here, or return to LOA Issuance to continue CMVPMS.</span>
         <button type="button" class="btn btn-outline btn-sm" onclick="selectWorkflowStep(${GOV_CMVPMS_MIN_STAGE})">Back to Stage 8</button>
       </div>`;
     }
-    if (progress < 14 && currentWorkflowStep === 14) {
+    if (progress < govTotal && currentWorkflowStep === govTotal) {
       return `<div class="wf-view-banner wf-view-banner--past">
         <i class="fa-solid fa-rotate"></i>
-        <span>You are on <strong>Stage 14: Renewal</strong> after completing the sequential flow.</span>
+        <span>You are on <strong>Stage ${govTotal}: Renewal</strong> after completing the sequential flow.</span>
       </div>`;
     }
   }
@@ -7323,12 +7358,12 @@ function getGovStageCategoryOptions(rows) {
   return ['All categories', ...new Set([...fixed, ...cats])];
 }
 
-function applyGovStageCategoryFilter(rows, filterState) {
+function applyGovStageCategoryFilter(rows, filterState, opts = {}) {
   let list = Array.isArray(rows) ? rows.slice() : [];
   const cat = filterState?.category;
   if (cat && cat !== 'all') {
     list = list.filter(r => r.category === cat);
-  } else if (typeof currentCategory !== 'undefined' && currentCategory && currentCategory !== 'All') {
+  } else if (!opts.ignoreGlobalCategory && typeof currentCategory !== 'undefined' && currentCategory && currentCategory !== 'All') {
     list = list.filter(r => r.category === currentCategory);
   }
   return list;
@@ -7501,6 +7536,8 @@ function getWfStageFilterState(stageKey) {
   if (stageKey === 'tender') return govTenderPrepState;
   if (stageKey === 'bid') return govBidEvalState;
   if (stageKey === 'contract') return govContractState;
+  if (stageKey === 'loa') return govLoaState;
+  if (stageKey === 'qc') return govQcState;
   if (stageKey === 'award') return govAwardState;
   if (stageKey === 'po') return govPoState;
   if (stageKey === 'grn') return govGrnState;
@@ -7859,6 +7896,691 @@ function setContractApprovalPage(page) {
   document.getElementById('contractApprovalTable')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
+/* ========== CMVPMS Stage 8 — LOA Issuance (Resource Manager) ========== */
+/** LOA sources are completed Bid Evaluation L1/H1 outcomes — NOT Stage 11 awards. */
+function getLoaEligibleEvaluations() {
+  const evals = typeof BID_EVALUATION_DATA !== 'undefined' ? (BID_EVALUATION_DATA.evaluations || []) : [];
+  return evals.filter(e =>
+    e.status === 'Evaluation complete'
+    && e.l1Vendor
+    && !String(e.l1Vendor).includes('Pending')
+  );
+}
+
+function getLoaIssuanceRows() {
+  const evals = getLoaEligibleEvaluations();
+  const rows = evals.map(e => {
+    const issued = govLoaState.issued[e.id] || govLoaState.issued[e.tenderId] || {};
+    const loaNo = issued.loaNo || '—';
+    const loaDate = issued.loaDate || '—';
+    const loaStatus = issued.status || (loaNo !== '—' ? 'LOA issued' : 'Pending LOA');
+    return {
+      id: e.id,
+      evalId: e.id,
+      tenderId: e.tenderId,
+      title: e.title,
+      state: e.state,
+      division: e.division,
+      category: e.category,
+      vendor: issued.vendor || e.l1Vendor,
+      value: issued.value || e.l1Value,
+      method: e.method,
+      loaNo,
+      loaDate,
+      loaStatus,
+      date: (loaDate && loaDate !== '—') ? loaDate : (e.evalDate || '—'),
+      _justIssued: !!issued.issuedAt
+    };
+  });
+  const filtered = applyStagePeriodFilter(
+    applyGovStageCategoryFilter(rows, govLoaState, { ignoreGlobalCategory: true }),
+    govLoaState,
+    'date'
+  );
+  return filtered.sort((a, b) => {
+    const ai = a.loaStatus === 'LOA issued' ? 0 : 1;
+    const bi = b.loaStatus === 'LOA issued' ? 0 : 1;
+    if (ai !== bi) return ai - bi;
+    if (a._justIssued && !b._justIssued) return -1;
+    if (!a._justIssued && b._justIssued) return 1;
+    return String(b.date || '').localeCompare(String(a.date || ''));
+  });
+}
+
+function setLoaIssuancePage(page) {
+  govLoaState.page = page;
+  refreshWorkflowUI();
+  document.getElementById('loaIssuanceTable')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function setLoaIssuanceCategory(label) {
+  govLoaState.category = (!label || label === 'All categories') ? 'all' : label;
+  govLoaState.page = 1;
+  refreshWorkflowUI();
+}
+
+function renderLoaIssuanceStage(canEdit = true) {
+  const rows = getLoaIssuanceRows();
+  const paged = paginateItems(rows, govLoaState.page, 10);
+  govLoaState.page = paged.page;
+  const issued = rows.filter(r => r.loaStatus === 'LOA issued' || (r.loaNo && r.loaNo !== '—')).length;
+  const periodLabel = getWfPeriodFilterLabel(govLoaState);
+  const categoryOptions = getGovStageCategoryOptions(getLoaEligibleEvaluations());
+  const canIssue = isResourceManagerDesk() && canEdit;
+  const filterEmptyRow = !paged.items.length
+    ? `<tr class="table-filter-empty-row"><td colspan="8"><div class="table-filter-empty"><i class="fa-solid fa-filter"></i><p>No L1 evaluation outcomes match <strong>${escapeHtmlLite(periodLabel)}</strong>.</p></div></td></tr>`
+    : '';
+
+  return `<div class="tender-prep-stage">
+    <div class="indent-mode-banner">
+      <div>
+        <strong>LOA Issuance — from Bid Evaluation (L1 / H1)</strong>
+        <p>Stage 8 uses <strong>completed bid evaluations</strong> — not Stage 11 awards. Issue LOA to the L1 / H1 vendor; Contract Award (Stage 11) comes only after contract approval.</p>
+      </div>
+      <span class="badge badge-info"><i class="fa-solid fa-calendar-days"></i> ${periodLabel}</span>
+    </div>
+    <div class="budget-pr-summary">
+      <div class="budget-pr-chip"><span>LOAs issued</span><strong>${issued} / ${rows.length}</strong></div>
+      <div class="budget-pr-chip"><span>Source</span><strong>Bid Evaluation L1</strong></div>
+      <div class="budget-pr-chip"><span>Desk</span><strong>Resource Manager</strong></div>
+      <div class="budget-pr-chip"><span>Next</span><strong>Create Contract &amp; PBG</strong></div>
+    </div>
+    <section class="budget-section" id="loaIssuanceTable">
+      <div class="data-table-wrap need-table">
+        ${renderGovStageListHeader({
+          title: 'LOA register (evaluation → LOA)',
+          stageKey: 'loa',
+          filterState: govLoaState,
+          selectId: 'loaIssuanceCategory',
+          categoryOptions,
+          lead: canIssue
+            ? 'Rows are <strong>Evaluation complete</strong> tenders with an L1/H1 vendor. Use <strong>Issue LOA</strong> to record LOA against that vendor.'
+            : 'View-only for Budget Officer — Resource Manager issues LOA.'
+        })}
+        <div class="data-table-scroll">
+        <table class="data-table consol-detail-table tender-prep-table">
+          <thead>
+            <tr>
+              <th>Evaluation</th>
+              <th>Tender</th>
+              <th>L1 / H1 Vendor</th>
+              <th>Category</th>
+              <th>LOA No.</th>
+              <th>Status</th>
+              <th>Value</th>
+              <th>Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${paged.items.length ? paged.items.map(r => `
+              <tr class="tender-prep-row${r._justIssued ? ' is-loa-new' : ''}" data-loa-award="${r.evalId}" onclick="openLoaIssuanceDetail('${r.evalId}')" title="Vendor: ${escapeHtmlLite(r.vendor)}">
+                <td><strong>${r.evalId}</strong></td>
+                <td>${r.title}<br><span class="cell-sub">${r.tenderId}</span></td>
+                <td><strong>${r.vendor}</strong></td>
+                <td>${r.category}</td>
+                <td class="cell-nowrap">${r.loaNo}</td>
+                <td><span class="badge badge-${needStatusBadge(r.loaStatus)}">${r.loaStatus}</span></td>
+                <td class="cell-nowrap">${r.value}</td>
+                <td class="cell-date">${r.date || '—'}</td>
+              </tr>`).join('') : filterEmptyRow}
+          </tbody>
+        </table>
+        </div>
+        ${paged.items.length ? renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setLoaIssuancePage') : ''}
+      </div>
+    </section>
+  </div>`;
+}
+
+function openLoaIssuanceDetail(evalId) {
+  const e = getLoaEligibleEvaluations().find(x => x.id === evalId);
+  if (!e) return;
+  const issued = govLoaState.issued[e.id] || {};
+  openModal(`${e.id} — LOA / evaluation`, `
+    <div class="kpi-detail">
+      <p class="consol-detail-lead" style="margin-top:0">${escapeHtmlLite(e.title)} · Tender <strong>${escapeHtmlLite(e.tenderId)}</strong></p>
+      <div class="tender-detail-stats tender-detail-stats--4">
+        <div class="tender-stat"><span>L1 / H1 vendor</span><strong>${escapeHtmlLite(e.l1Vendor)}</strong></div>
+        <div class="tender-stat"><span>Eval status</span><strong>${escapeHtmlLite(e.status)}</strong></div>
+        <div class="tender-stat"><span>LOA No.</span><strong>${escapeHtmlLite(issued.loaNo || '—')}</strong></div>
+        <div class="tender-stat"><span>LOA status</span><strong>${escapeHtmlLite(issued.status || 'Pending LOA')}</strong></div>
+      </div>
+      <p style="margin-top:0.75rem;color:#64748b;font-size:0.88rem">
+        This is a <strong>Bid Evaluation</strong> outcome. Stage 11 <strong>Contract Award</strong> is created only after Stage 10 approval and “Issue to vendor”.
+      </p>
+      <div class="modal-inline-actions" style="margin-top:1rem">
+        <button type="button" class="btn btn-outline" onclick="closeModal()"><i class="fa-solid fa-xmark"></i> Close</button>
+        ${isResourceManagerDesk() && !issued.loaNo ? `<button type="button" class="btn btn-primary" onclick="closeModal();openIssueLoaForm('${e.id}')"><i class="fa-solid fa-file-circle-plus"></i> Issue LOA</button>` : ''}
+      </div>
+    </div>
+  `);
+}
+
+function openIssueLoaForm(preselectEvalId) {
+  if (!isResourceManagerDesk()) {
+    showWfAlert('Only Resource Manager can issue LOA.');
+    return;
+  }
+  const evals = getLoaEligibleEvaluations();
+  if (!evals.length) {
+    showWfAlert('No completed bid evaluations with an L1 / H1 vendor are available for LOA.');
+    return;
+  }
+  const labels = evals.map(e => `${e.id} — ${e.title} (${e.l1Vendor})`);
+  const pre = preselectEvalId ? evals.find(e => e.id === preselectEvalId) : null;
+  const selected = pre ? `${pre.id} — ${pre.title} (${pre.l1Vendor})` : 'Select evaluation / L1…';
+  const sourceSelect = customSelectHTML('Bid evaluation (L1 / H1)', 'issueLoaSource', labels, selected, true)
+    .replace('class="form-group"', 'class="form-group full"');
+  openModal('Issue LOA', `
+    <div class="indent-modal-form kpi-detail">
+      <p class="consol-detail-lead" style="margin-top:0">
+        Select a <strong>completed Bid Evaluation</strong> — vendor is the L1 / H1 from that evaluation
+        (not a Stage 11 award). LOA then feeds Stage 9 Create contract.
+      </p>
+      <div class="form-grid wf-form-grid">
+        ${sourceSelect}
+        <div class="form-group"><label>Vendor — L1 / H1 (from evaluation)</label>
+          <input id="issueLoaVendor" type="text" readonly placeholder="Select evaluation to see vendor">
+        </div>
+        <div class="form-group"><label>Tender ID</label>
+          <input id="issueLoaTender" type="text" readonly placeholder="—">
+        </div>
+        <div class="form-group"><label>Category</label>
+          <input id="issueLoaCategory" type="text" readonly placeholder="—">
+        </div>
+        <div class="form-group"><label>Est. value</label>
+          <input id="issueLoaValue" type="text" readonly placeholder="—">
+        </div>
+        <div class="form-group"><label>LOA number</label><input id="issueLoaNo" type="text" placeholder="LOA/MP/…/2026/…"></div>
+        ${datePickerHTML('issueLoaDate', formatDateDMY(APP_TODAY), 'LOA date')}
+        <div class="form-group full"><label>Remarks</label><textarea id="issueLoaRemarks" rows="2" placeholder="Conditions / timelines…"></textarea></div>
+      </div>
+      <div class="modal-inline-actions" style="margin-top:1rem">
+        <button type="button" class="btn btn-outline" onclick="closeModal()"><i class="fa-solid fa-xmark"></i> Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="submitIssueLoaForm()"><i class="fa-solid fa-file-circle-plus"></i> Issue LOA</button>
+      </div>
+    </div>
+  `, { wide: true });
+  if (typeof initCustomSelects === 'function') initCustomSelects();
+  const source = document.querySelector('.custom-select[data-select-id="issueLoaSource"]');
+  source?.addEventListener('change', fillIssueLoaVendorFields);
+  fillIssueLoaVendorFields();
+}
+
+function resolveIssueLoaEvaluation() {
+  const label = typeof getCustomSelectValue === 'function' ? getCustomSelectValue('issueLoaSource') : '';
+  if (!label || label === 'Select evaluation / L1…') return null;
+  const id = (label.split(' — ')[0] || '').trim();
+  return getLoaEligibleEvaluations().find(e => e.id === id) || null;
+}
+
+function fillIssueLoaVendorFields() {
+  const ev = resolveIssueLoaEvaluation();
+  const set = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.value = val == null || val === '' ? '' : String(val);
+  };
+  if (!ev) {
+    set('issueLoaVendor', '');
+    set('issueLoaTender', '');
+    set('issueLoaCategory', '');
+    set('issueLoaValue', '');
+    return;
+  }
+  set('issueLoaVendor', ev.l1Vendor);
+  set('issueLoaTender', ev.tenderId);
+  set('issueLoaCategory', ev.category);
+  set('issueLoaValue', ev.l1Value);
+  const existing = govLoaState.issued[ev.id];
+  if (!document.getElementById('issueLoaNo')?.value) {
+    set('issueLoaNo', existing?.loaNo
+      || `LOA/MP/${(ev.category || 'GEN').slice(0, 3).toUpperCase()}/2026/${String(ev.tenderId).slice(-3)}`);
+  }
+}
+
+function submitIssueLoaForm() {
+  if (!isResourceManagerDesk()) {
+    showWfAlert('Only Resource Manager can issue LOA.');
+    return;
+  }
+  const ev = resolveIssueLoaEvaluation();
+  if (!ev) {
+    showWfAlert('Please select a completed bid evaluation with L1 / H1 vendor.');
+    return;
+  }
+  const today = formatDateDMY(APP_TODAY);
+  const loaNo = document.getElementById('issueLoaNo')?.value?.trim()
+    || `LOA/MP/${(ev.category || 'GEN').slice(0, 3).toUpperCase()}/2026/${String(ev.tenderId).slice(-3)}`;
+  let loaDate = document.getElementById('issueLoaDate')?.value?.trim() || today;
+  if (/^\d{4}-\d{2}-\d{2}/.test(loaDate)) loaDate = formatDateDMY(loaDate);
+  const remarks = document.getElementById('issueLoaRemarks')?.value?.trim() || '';
+  govLoaState.issued[ev.id] = {
+    loaNo,
+    loaDate,
+    status: 'LOA issued',
+    remarks,
+    vendor: ev.l1Vendor,
+    tenderId: ev.tenderId,
+    title: ev.title,
+    category: ev.category,
+    value: ev.l1Value,
+    state: ev.state,
+    division: ev.division,
+    evalId: ev.id,
+    by: authUser?.name || 'Resource Manager',
+    issuedAt: Date.now()
+  };
+  // Also key by tender for Stage 9 create-contract lookup
+  govLoaState.issued[ev.tenderId] = govLoaState.issued[ev.id];
+  govLoaState.category = 'all';
+  govLoaState.year = 'all';
+  govLoaState.period = 'all';
+  govLoaState.page = 1;
+  try { persistGovLifecycle?.(); } catch (_) { /* optional */ }
+  closeModal();
+  refreshWorkflowUI();
+  setTimeout(() => {
+    document.querySelector(`tr[data-loa-award="${ev.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    openModal('LOA issued', `
+      <div class="sync-success-msg">
+        <div class="sync-success-icon"><i class="fa-solid fa-circle-check"></i></div>
+        <h4>LOA recorded from Bid Evaluation</h4>
+        <p>
+          <strong>${escapeHtmlLite(loaNo)}</strong> issued to L1/H1 vendor
+          <strong>${escapeHtmlLite(ev.l1Vendor)}</strong>
+          for <strong>${escapeHtmlLite(ev.title)}</strong>.
+        </p>
+        <p style="margin-top:0.5rem">
+          Source: evaluation <strong>${escapeHtmlLite(ev.id)}</strong> · Stage 11 Award is created later after contract approval.
+        </p>
+      </div>
+      <div class="modal-inline-actions" style="margin-top:1rem;justify-content:center">
+        <button type="button" class="btn btn-primary" onclick="closeModal()"><i class="fa-solid fa-xmark"></i> Close</button>
+      </div>
+    `);
+  }, 60);
+}
+
+function getContractPbgRecord(contractId, tenderId) {
+  const saved = govContractState.pbgRecords?.[contractId];
+  if (saved) return saved;
+  // Seed award PBG is display-only — Stage 9 Record PBG (BO) is the real gate
+  const award = (typeof AWARD_STAGE_DATA !== 'undefined' ? AWARD_STAGE_DATA.awards : [])
+    .find(a => a.contractId === contractId || a.tenderId === tenderId);
+  if (!award) return null;
+  return {
+    status: award.pbgStatus === 'Received' ? 'Synced (confirm on Stage 9)' : (award.pbgStatus || 'Pending'),
+    amount: award.pbgAmount || '—',
+    ref: award.pbgRef || '—',
+    receivedOn: award.pbgStatus === 'Received' ? (award.pbgDue || '—') : '—',
+    recordedBy: award.pbgStatus === 'Received' ? 'Seed sync — re-record via Budget Officer' : '—'
+  };
+}
+
+function isPbgRecordedForContract(r) {
+  const rec = govContractState.pbgRecords?.[r?.id];
+  return !!(rec && (rec.status === 'Received' || rec.status === 'Recorded'));
+}
+
+/* ========== CMVPMS Stage 9 — Create Contract & PBG ========== */
+function renderCreateContractPbgStage(canEdit = true) {
+  const data = typeof CONTRACT_APPROVAL_DATA !== 'undefined' ? CONTRACT_APPROVAL_DATA : null;
+  if (!data) return `<div class="need-api-empty"><p>Contract data could not be loaded.</p></div>`;
+  const rows = getContractApprovalRows();
+  const paged = paginateItems(rows, govContractState.page, 10);
+  govContractState.page = paged.page;
+  const periodLabel = getWfPeriodFilterLabel(govContractState);
+  const categoryOptions = getGovStageCategoryOptions(data.contracts || []);
+  const pbgDone = rows.filter(r => isPbgRecordedForContract(r)).length;
+  const rmNote = isResourceManagerDesk()
+    ? 'Use <strong>Create contract form</strong> to draft from LOA. PBG recording is reserved for Finance / Budget Officer.'
+    : isBudgetOfficer()
+      ? 'Use <strong>Record PBG</strong> only. Create contract is Resource Manager\'s action.'
+      : 'Role-restricted desk.';
+
+  return `<div class="tender-prep-stage">
+    <div class="indent-mode-banner">
+      <div>
+        <strong>Create Contract &amp; PBG</strong>
+        <p>${rmNote}</p>
+      </div>
+      <span class="badge badge-info"><i class="fa-solid fa-calendar-days"></i> ${periodLabel}</span>
+    </div>
+    <div class="budget-pr-summary">
+      <div class="budget-pr-chip"><span>Contracts</span><strong>${rows.length}</strong></div>
+      <div class="budget-pr-chip"><span>PBG recorded</span><strong>${pbgDone}</strong></div>
+      <div class="budget-pr-chip"><span>Create contract</span><strong>Resource Manager</strong></div>
+      <div class="budget-pr-chip"><span>Record PBG</span><strong>Budget Officer only</strong></div>
+    </div>
+    <section class="budget-section" id="contractPbgTable">
+      <div class="data-table-wrap need-table">
+        ${renderGovStageListHeader({
+          title: 'Contract &amp; PBG register',
+          stageKey: 'contract',
+          filterState: govContractState,
+          selectId: 'contractPbgCategory',
+          categoryOptions,
+          lead: isBudgetOfficer()
+            ? 'Open a row or use <strong>Record PBG</strong> in the header. You record PBG here — contract Approve is Stage 10.'
+            : 'RM creates contracts here. PBG is recorded by Finance / Budget Officer (not by RM).'
+        })}
+        <div class="data-table-scroll">
+        <table class="data-table consol-detail-table tender-prep-table">
+          <thead>
+            <tr>
+              <th>Contract</th>
+              <th>Tender</th>
+              <th>L1 bidder</th>
+              <th>Status</th>
+              <th>PBG</th>
+              <th>Value</th>
+              <th>Date</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${paged.items.length ? paged.items.map(r => {
+              const pbg = getContractPbgRecord(r.id, r.tenderId);
+              const pbgOk = isPbgRecordedForContract(r);
+              const pbgLabel = pbgOk ? 'Received' : (pbg?.status || 'Pending');
+              const title = r.title && r.title !== 'undefined' ? r.title : '—';
+              const tenderId = r.tenderId && r.tenderId !== 'undefined' ? r.tenderId : '—';
+              const vendor = r.l1Vendor && r.l1Vendor !== 'undefined' ? r.l1Vendor : '—';
+              const actionLabel = isBudgetOfficer()
+                ? (pbgOk ? 'View PBG' : 'Record PBG')
+                : 'View';
+              return `<tr class="tender-prep-row" onclick="openContractPbgDetail('${r.id}')">
+                <td><strong>${r.id}</strong></td>
+                <td>${escapeHtmlLite(title)}<br><span class="cell-sub">${escapeHtmlLite(tenderId)}</span></td>
+                <td>${escapeHtmlLite(vendor)}</td>
+                <td><span class="badge badge-${needStatusBadge(r.status)}">${r.status}</span></td>
+                <td><span class="badge badge-${needStatusBadge(pbgLabel)}">${escapeHtmlLite(pbgLabel)}</span></td>
+                <td class="cell-nowrap">${r.value && r.value !== 'undefined' ? r.value : '—'}</td>
+                <td class="cell-date">${r.date || '—'}</td>
+                <td><span class="cell-link">${actionLabel} <i class="fa-solid fa-arrow-right"></i></span></td>
+              </tr>`;
+            }).join('') : `<tr><td colspan="8" style="text-align:center;color:#64748b;padding:1.25rem">No contracts yet — create from LOA.</td></tr>`}
+          </tbody>
+        </table>
+        </div>
+        ${paged.items.length ? renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setContractApprovalPage') : ''}
+      </div>
+    </section>
+  </div>`;
+}
+
+function openContractPbgDetail(contractId) {
+  const r = (typeof CONTRACT_APPROVAL_DATA !== 'undefined' ? CONTRACT_APPROVAL_DATA.contracts : [])
+    .find(c => c.id === contractId);
+  if (!r) return;
+  const pbg = getContractPbgRecord(r.id, r.tenderId);
+  const pbgOk = isPbgRecordedForContract(r);
+  const decision = govContractState.approvals[r.id]?.decision || 'Pending review';
+
+  openModal(`${r.id} — Contract & PBG (Stage 9)`, `
+    <div class="indent-modal-form kpi-detail">
+      <p class="consol-detail-lead" style="margin-top:0">
+        <strong>Stage 9</strong> = create contract (RM) + <strong>Record PBG</strong> (Budget Officer).
+        PBG is not “approved” here — after PBG is recorded, go to <strong>Stage 10</strong> to Approve the contract.
+      </p>
+      <div class="consol-detail-stats" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:1rem">
+        <div class="consol-detail-stat"><span>Contract</span><strong>${escapeHtmlLite(r.id)}</strong></div>
+        <div class="consol-detail-stat"><span>L1 bidder</span><strong>${escapeHtmlLite(r.l1Vendor || '—')}</strong></div>
+        <div class="consol-detail-stat"><span>PBG</span><strong><span class="badge badge-${needStatusBadge(pbgOk ? 'Received' : 'Pending')}">${pbgOk ? 'Received' : 'Pending'}</span></strong></div>
+        <div class="consol-detail-stat"><span>Stage 10 decision</span><strong>${escapeHtmlLite(decision)}</strong></div>
+      </div>
+      <div class="consol-detail-table-wrap" style="margin-bottom:1rem">
+        <table class="data-table consol-detail-table">
+          <tbody>
+            <tr><td>Title</td><td><strong>${escapeHtmlLite(r.title || '—')}</strong></td></tr>
+            <tr><td>Tender</td><td>${escapeHtmlLite(r.tenderId || '—')}</td></tr>
+            <tr><td>Value</td><td>${escapeHtmlLite(r.value || '—')}</td></tr>
+            <tr><td>Contract status</td><td><span class="badge badge-${needStatusBadge(r.status)}">${escapeHtmlLite(r.status)}</span></td></tr>
+            <tr><td>PBG amount</td><td>${escapeHtmlLite(pbg?.amount || '—')}</td></tr>
+            <tr><td>PBG reference</td><td>${escapeHtmlLite(pbg?.ref || '—')}</td></tr>
+            <tr><td>Recorded by</td><td>${escapeHtmlLite(pbg?.recordedBy || '—')}</td></tr>
+            <tr><td>Received on</td><td>${escapeHtmlLite(pbg?.receivedOn || '—')}</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-inline-actions" style="margin-top:0.5rem">
+        <button type="button" class="btn btn-outline" onclick="closeModal()"><i class="fa-solid fa-xmark"></i> Close</button>
+        ${isBudgetOfficer()
+          ? (pbgOk
+            ? `<button type="button" class="btn btn-primary" onclick="closeModal();selectWorkflowStep(10);setTimeout(()=>openContractApprovalDetail('${r.id}'),80)">
+                 <i class="fa-solid fa-stamp"></i> Go to Stage 10 — Approve contract
+               </button>`
+            : `<button type="button" class="btn btn-primary" onclick="closeModal();openRecordPbgForm('${r.id}')">
+                 <i class="fa-solid fa-building-columns"></i> Record PBG
+               </button>`)
+          : `<span class="download-confirm-hint" style="margin:0">
+               You are Resource Manager — you cannot record PBG.
+               Log in as <strong>Finance / Budget Officer</strong>
+               (<code>budget@mphp.gov.in</code> / <code>Budget@2026</code>),
+               then use header <strong>Record PBG</strong> or open this row again.
+             </span>`}
+      </div>
+    </div>
+  `, { wide: true });
+}
+
+function openRecordPbgForm(preselectId) {
+  if (!isBudgetOfficer()) {
+    showWfAlert('Only Finance / Budget Officer can record PBG issuance.');
+    return;
+  }
+  const rows = (typeof CONTRACT_APPROVAL_DATA !== 'undefined' ? CONTRACT_APPROVAL_DATA.contracts : [])
+    .filter(c => c.l1Vendor && !String(c.l1Vendor).includes('Pending'));
+  if (!rows.length) {
+    showWfAlert('No contracts available to record PBG against.');
+    return;
+  }
+  const labels = rows.map(r => `${r.id} — ${r.title} (${r.l1Vendor})`);
+  const pre = preselectId ? rows.find(r => r.id === preselectId) : null;
+  const selected = pre ? `${pre.id} — ${pre.title} (${pre.l1Vendor})` : 'Select contract…';
+  const sourceSelect = customSelectHTML('Contract', 'recordPbgSource', labels, selected, true)
+    .replace('class="form-group"', 'class="form-group full"');
+  openModal('Record PBG (Budget Officer)', `
+    <div class="indent-modal-form kpi-detail">
+      <p class="consol-detail-lead" style="margin-top:0">Finance / Budget Officer only. PBG must be recorded before Contract Approval (Stage 10).</p>
+      <div class="form-grid wf-form-grid">
+        ${sourceSelect}
+        <div class="form-group"><label>PBG amount</label><input id="recordPbgAmount" type="text" placeholder="₹ …"></div>
+        <div class="form-group"><label>PBG reference</label><input id="recordPbgRef" type="text" placeholder="PBG/BANK/…"></div>
+        <div class="form-group"><label>Issuing bank</label><input id="recordPbgBank" type="text" placeholder="Bank name"></div>
+        ${datePickerHTML('recordPbgDate', formatDateDMY(APP_TODAY), 'Received / recorded date')}
+        <div class="form-group full"><label>Remarks</label><textarea id="recordPbgRemarks" rows="2" placeholder="SFMS / e-BG verification notes…"></textarea></div>
+      </div>
+      <div class="modal-inline-actions" style="margin-top:1rem">
+        <button type="button" class="btn btn-outline" onclick="closeModal()"><i class="fa-solid fa-xmark"></i> Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="submitRecordPbgForm()"><i class="fa-solid fa-building-columns"></i> Record PBG</button>
+      </div>
+    </div>
+  `, { wide: true });
+  if (typeof initCustomSelects === 'function') initCustomSelects();
+}
+
+function submitRecordPbgForm() {
+  if (!isBudgetOfficer()) {
+    showWfAlert('Only Finance / Budget Officer can record PBG issuance.');
+    return;
+  }
+  const label = typeof getCustomSelectValue === 'function' ? getCustomSelectValue('recordPbgSource') : '';
+  if (!label || label === 'Select contract…') {
+    showWfAlert('Please select a contract.');
+    return;
+  }
+  const id = (label.split(' — ')[0] || '').trim();
+  const contract = (typeof CONTRACT_APPROVAL_DATA !== 'undefined' ? CONTRACT_APPROVAL_DATA.contracts : []).find(c => c.id === id);
+  if (!contract) return;
+  const today = formatDateDMY(APP_TODAY);
+  const amount = document.getElementById('recordPbgAmount')?.value?.trim() || 'As per NIT (5%–10%)';
+  const ref = document.getElementById('recordPbgRef')?.value?.trim() || `PBG/REC/${String(id).slice(-4)}`;
+  const bank = document.getElementById('recordPbgBank')?.value?.trim() || 'Scheduled bank';
+  const receivedOn = document.getElementById('recordPbgDate')?.value?.trim() || today;
+  const remarks = document.getElementById('recordPbgRemarks')?.value?.trim() || '';
+  govContractState.pbgRecords[id] = {
+    status: 'Received',
+    amount,
+    ref,
+    bank,
+    receivedOn,
+    remarks,
+    recordedBy: authUser?.name || 'Finance / Budget Officer',
+    recordedOn: today
+  };
+  const award = (typeof AWARD_STAGE_DATA !== 'undefined' ? AWARD_STAGE_DATA.awards : [])
+    .find(a => a.contractId === id || a.tenderId === contract.tenderId);
+  if (award) {
+    award.pbgStatus = 'Received';
+    award.pbgRef = ref;
+    award.pbgAmount = amount;
+    if (award.checklist) award.checklist.pbg = true;
+  }
+  try { persistGovLifecycle?.(); } catch (_) { /* optional */ }
+  closeModal();
+  refreshWorkflowUI();
+  showWfAlert(`PBG recorded for ${id} by Budget Officer.`, 'success');
+}
+
+/* ========== CMVPMS Stage 12 — Quality Control (Resource Manager) ========== */
+function getQcRows() {
+  const contracts = typeof CONTRACT_APPROVAL_DATA !== 'undefined' ? (CONTRACT_APPROVAL_DATA.contracts || []) : [];
+  const rows = contracts.map(c => {
+    const qc = govQcState.statuses[c.id] || {};
+    return {
+      ...c,
+      qcStatus: qc.status || 'Not started',
+      qcInspector: qc.inspector || '—',
+      qcUpdated: qc.updatedOn || '—',
+      date: qc.updatedOn || c.date || c.signedOn || '—'
+    };
+  });
+  return applyStagePeriodFilter(applyGovStageCategoryFilter(rows, govQcState), govQcState, 'date');
+}
+
+function setQcPage(page) {
+  govQcState.page = page;
+  refreshWorkflowUI();
+}
+
+function setQcCategory(label) {
+  govQcState.category = (!label || label === 'All categories') ? 'all' : label;
+  govQcState.page = 1;
+  refreshWorkflowUI();
+}
+
+function renderQualityControlStage(canEdit = true) {
+  const rows = getQcRows();
+  const paged = paginateItems(rows, govQcState.page, 10);
+  govQcState.page = paged.page;
+  const periodLabel = getWfPeriodFilterLabel(govQcState);
+  const categoryOptions = getGovStageCategoryOptions(typeof CONTRACT_APPROVAL_DATA !== 'undefined' ? CONTRACT_APPROVAL_DATA.contracts : []);
+  const passed = rows.filter(r => r.qcStatus === 'Passed').length;
+  const canUpdate = isResourceManagerDesk() && canEdit;
+
+  return `<div class="tender-prep-stage">
+    <div class="indent-mode-banner">
+      <div>
+        <strong>Quality Control — separate status</strong>
+        <p>Resource Manager records QC status independently of invoice matching. Purchase Order / GRN stages are not part of this CMVPMS timeline.</p>
+      </div>
+      <span class="badge badge-info"><i class="fa-solid fa-calendar-days"></i> ${periodLabel}</span>
+    </div>
+    <div class="budget-pr-summary">
+      <div class="budget-pr-chip"><span>Passed</span><strong>${passed} / ${rows.length}</strong></div>
+      <div class="budget-pr-chip"><span>Desk</span><strong>Resource Manager</strong></div>
+    </div>
+    <section class="budget-section" id="qcStageTable">
+      <div class="data-table-wrap need-table">
+        ${renderGovStageListHeader({
+          title: 'Quality Control status register',
+          stageKey: 'qc',
+          filterState: govQcState,
+          selectId: 'qcStageCategory',
+          categoryOptions,
+          lead: canUpdate ? 'Open a row to update QC status.' : 'View-only for Budget Officer.'
+        })}
+        <div class="data-table-scroll">
+        <table class="data-table consol-detail-table tender-prep-table">
+          <thead>
+            <tr>
+              <th>Contract</th>
+              <th>Tender</th>
+              <th>Vendor</th>
+              <th>Category</th>
+              <th>QC status</th>
+              <th>Inspector</th>
+              <th>Updated</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${paged.items.length ? paged.items.map(r => `
+              <tr class="tender-prep-row" onclick="openQcStatusForm('${r.id}')">
+                <td><strong>${r.id}</strong></td>
+                <td>${r.title}<br><span class="cell-sub">${r.tenderId}</span></td>
+                <td>${r.l1Vendor}</td>
+                <td>${r.category}</td>
+                <td><span class="badge badge-${needStatusBadge(r.qcStatus)}">${r.qcStatus}</span></td>
+                <td>${r.qcInspector}</td>
+                <td class="cell-date">${r.qcUpdated}</td>
+                <td><span class="cell-link">${canUpdate ? 'Update QC' : 'View'} <i class="fa-solid fa-arrow-right"></i></span></td>
+              </tr>`).join('') : `<tr><td colspan="8" style="text-align:center;color:#64748b;padding:1.25rem">No contracts for QC yet.</td></tr>`}
+          </tbody>
+        </table>
+        </div>
+        ${paged.items.length ? renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setQcPage') : ''}
+      </div>
+    </section>
+  </div>`;
+}
+
+function openQcStatusForm(contractId) {
+  const r = (typeof CONTRACT_APPROVAL_DATA !== 'undefined' ? CONTRACT_APPROVAL_DATA.contracts : []).find(c => c.id === contractId);
+  if (!r) return;
+  const qc = govQcState.statuses[contractId] || { status: 'Not started', inspector: '', remarks: '' };
+  const canUpdate = isResourceManagerDesk();
+  const statusSelect = canUpdate
+    ? customSelectHTML('QC status', 'qcStatusSelect', ['Not started', 'In progress', 'Passed', 'Failed'], qc.status || 'Not started', true)
+    : `<div class="form-group"><label>QC status</label><input type="text" value="${qc.status || 'Not started'}" readonly></div>`;
+  openModal(`${r.id} — Quality Control`, `
+    <div class="indent-modal-form kpi-detail">
+      <p class="consol-detail-lead" style="margin-top:0">${r.title} · ${r.l1Vendor}</p>
+      <div class="form-grid wf-form-grid">
+        ${statusSelect}
+        <div class="form-group"><label>Inspector</label>
+          <input id="qcInspector" type="text" value="${qc.inspector || ''}" ${canUpdate ? '' : 'readonly'} placeholder="Inspection / QA officer">
+        </div>
+        <div class="form-group full"><label>Remarks</label>
+          <textarea id="qcRemarks" rows="2" ${canUpdate ? '' : 'readonly'} placeholder="QC observations…">${qc.remarks || ''}</textarea>
+        </div>
+      </div>
+      <div class="modal-inline-actions" style="margin-top:1rem">
+        <button type="button" class="btn btn-outline" onclick="closeModal()"><i class="fa-solid fa-xmark"></i> Close</button>
+        ${canUpdate ? `<button type="button" class="btn btn-primary" onclick="submitQcStatusForm('${r.id}')"><i class="fa-solid fa-flask"></i> Save QC status</button>` : ''}
+      </div>
+    </div>
+  `);
+  if (canUpdate && typeof initCustomSelects === 'function') initCustomSelects();
+}
+
+function submitQcStatusForm(contractId) {
+  if (!isResourceManagerDesk()) {
+    showWfAlert('Only Resource Manager can update Quality Control status.');
+    return;
+  }
+  const status = typeof getCustomSelectValue === 'function' ? getCustomSelectValue('qcStatusSelect') : 'Not started';
+  const inspector = document.getElementById('qcInspector')?.value?.trim() || (authUser?.name || 'Resource Manager');
+  const remarks = document.getElementById('qcRemarks')?.value?.trim() || '';
+  const today = formatDateDMY(APP_TODAY);
+  govQcState.statuses[contractId] = { status, inspector, remarks, updatedOn: today, by: authUser?.name || 'Resource Manager' };
+  try { persistGovLifecycle?.(); } catch (_) { /* optional */ }
+  closeModal();
+  refreshWorkflowUI();
+  showWfAlert(`QC status for ${contractId} set to ${status}.`, 'success');
+}
+
 function renderContractApprovalStage(canEdit = true) {
   const data = typeof CONTRACT_APPROVAL_DATA !== 'undefined' ? CONTRACT_APPROVAL_DATA : null;
   if (!data) return `<div class="need-api-empty"><p>Contract approval data could not be loaded.</p></div>`;
@@ -7875,8 +8597,8 @@ function renderContractApprovalStage(canEdit = true) {
   return `<div class="tender-prep-stage">
     <div class="indent-mode-banner">
       <div>
-        <strong>Contract approval — synced LOI / PBG / T&amp;C gate</strong>
-        <p>${data.meta.note} Open each row for timestamped Approve / Clarify / Reject over DVDMS–NIC–tender synced fields (no term re-entry forms).</p>
+        <strong>Contract Approval — Budget Officer desk</strong>
+        <p>Finance / Budget Officer approves with timestamp. Approval is blocked until PBG is recorded on Stage 9. Resource Manager can view but cannot approve.</p>
       </div>
       <span class="badge badge-info"><i class="fa-solid fa-calendar-days"></i> ${periodLabel}</span>
     </div>
@@ -7915,9 +8637,10 @@ function renderContractApprovalStage(canEdit = true) {
           <tbody>
             ${paged.items.length ? paged.items.map(r => {
               const saved = govContractState.approvals[r.id];
-              const actionLabel = saved?.decision === 'Approved' || r.status === 'Agreement signed'
-                ? 'View decision'
-                : 'Open approval gate';
+              const pbgOk = isPbgRecordedForContract(r);
+              let actionLabel = 'Open approval gate';
+              if (saved?.decision === 'Approved' || saved?.decision === 'Rejected') actionLabel = 'View decision';
+              else if (!pbgOk) actionLabel = 'PBG pending → Open';
               return `
               <tr class="tender-prep-row" onclick="openContractApprovalDetail('${r.id}')" title="Open timestamped approval gate">
                 <td><strong>${r.id}</strong></td>
@@ -7940,15 +8663,45 @@ function renderContractApprovalStage(canEdit = true) {
   </div>`;
 }
 
+function openNextPendingContractApproval() {
+  if (!isBudgetOfficer()) {
+    showWfAlert('Only Finance / Budget Officer can approve contracts.');
+    return;
+  }
+  const rows = typeof CONTRACT_APPROVAL_DATA !== 'undefined' ? (CONTRACT_APPROVAL_DATA.contracts || []) : [];
+  const pending = rows.find(r => {
+    const saved = govContractState.approvals[r.id];
+    if (saved?.decision === 'Approved' || saved?.decision === 'Rejected') return false;
+    if (r.status === 'Awaiting L1 lock') return false;
+    return !!(r.l1Vendor && !String(r.l1Vendor).includes('Pending'));
+  });
+  if (!pending) {
+    showWfAlert('No contracts pending Budget Officer approval right now.');
+    return;
+  }
+  if (!isPbgRecordedForContract(pending)) {
+    showWfAlert(`PBG not recorded for ${pending.id}. Opening Stage 9 Record PBG first.`);
+    selectWorkflowStep(9);
+    setTimeout(() => openRecordPbgForm(pending.id), 120);
+    return;
+  }
+  openContractApprovalDetail(pending.id);
+}
+
 function getContractApprovalFormDefaults(r) {
   const saved = govContractState.approvals[r.id] || {};
-  const alreadySigned = r.status === 'Agreement signed';
+  const decided = saved.decision === 'Approved' || saved.decision === 'Rejected';
+  const authorityTitle = isBudgetOfficer()
+    ? 'Finance / Budget Officer'
+    : (authUser?.title || 'Resource Manager');
   return {
-    decision: saved.decision || (alreadySigned ? 'Approved' : 'Pending review'),
-    authority: saved.authority || (authUser?.name || 'Dr. Rajesh Sharma') + ' — Resource Manager',
-    designation: saved.designation || 'Competent Authority / Contract Approving Officer',
+    decision: saved.decision || 'Pending review',
+    authority: saved.authority || `${authUser?.name || 'Finance Officer'} — ${authorityTitle}`,
+    designation: saved.designation || (isBudgetOfficer()
+      ? 'Finance / Budget Officer — Contract Approving Officer'
+      : 'Competent Authority / Contract Approving Officer'),
     office: saved.office || `DoPHFW · ${r.division} Division, Madhya Pradesh`,
-    sanctionRef: saved.sanctionRef || `SAN/MP/${r.category.slice(0, 3).toUpperCase()}/2026/${r.id.slice(-3)}`,
+    sanctionRef: saved.sanctionRef || `SAN/MP/${String(r.category || 'GEN').slice(0, 3).toUpperCase()}/2026/${r.id.slice(-3)}`,
     contractPeriod: saved.contractPeriod || '24 months from agreement date',
     deliveryTerms: saved.deliveryTerms || 'As per NIT / rate-contract schedule',
     pbgRequired: saved.pbgRequired || 'Yes — 5% to 10% of contract value (SFMS / e-BG)',
@@ -7956,17 +8709,18 @@ function getContractApprovalFormDefaults(r) {
     priceFall: saved.priceFall || 'Yes — price fall clause applicable',
     remarks: saved.remarks || r.remarks || '',
     checks: saved.checks || {
-      evalDone: alreadySigned || r.status !== 'Awaiting L1 lock',
-      l1Confirmed: alreadySigned || (r.l1Vendor && !String(r.l1Vendor).includes('Pending')),
-      budgetOk: alreadySigned || r.financeStatus === 'Cleared',
-      legalOk: alreadySigned || r.legalStatus === 'Cleared',
-      noaOk: alreadySigned || !!(r.noaNo && r.noaNo !== '—'),
-      draftOk: alreadySigned || !!(r.agreementNo && r.agreementNo !== '—'),
-      gfrOk: alreadySigned,
-      conflictOk: alreadySigned
+      evalDone: r.status !== 'Awaiting L1 lock',
+      l1Confirmed: !!(r.l1Vendor && !String(r.l1Vendor).includes('Pending')),
+      budgetOk: r.financeStatus === 'Cleared' || r.financeStatus === 'Under review',
+      legalOk: r.legalStatus === 'Cleared' || r.legalStatus === 'Under review',
+      noaOk: !!(r.noaNo && r.noaNo !== '—'),
+      draftOk: !!(r.agreementNo && r.agreementNo !== '—'),
+      gfrOk: false,
+      conflictOk: false
     },
-    decidedOn: saved.decidedOn || (alreadySigned ? r.signedOn : ''),
-    readonly: alreadySigned || saved.decision === 'Approved' || saved.decision === 'Rejected'
+    decidedOn: saved.decidedOn || '',
+    // Only lock after Budget Officer explicitly records Approve / Reject — never from seed "Agreement signed"
+    readonly: decided
   };
 }
 
@@ -7978,11 +8732,15 @@ function openContractApprovalDetail(contractId) {
   const statusSince = getContractStatusDate(r);
   const award = (typeof AWARD_STAGE_DATA !== 'undefined' ? AWARD_STAGE_DATA.awards : []).find(a => a.contractId === r.id || a.tenderId === r.tenderId);
   const loiAck = award?.loaAck || '—';
-  const pbgOk = award?.pbgStatus === 'Received' || r.status === 'Agreement signed';
-  const gateOk = (loiAck === 'Acknowledged' || r.status === 'Agreement signed') && (pbgOk || r.status === 'Agreement signed');
+  const pbgRec = getContractPbgRecord(r.id, r.tenderId);
+  const pbgOk = isPbgRecordedForContract(r);
+  const gateOk = pbgOk;
   const followUpBtn = `<button type="button" class="btn btn-primary btn-sm" onclick="openStageFollowUpModal('contract','row','${r.id}')">
           <i class="fa-solid fa-envelope-open-text"></i> Take Follow-up
         </button>`;
+  const pbgLabel = pbgOk
+    ? `Received · ${pbgRec?.ref || '—'} (${pbgRec?.receivedOn || '—'})`
+    : `${pbgRec?.status || 'Pending'} — Budget Officer must Record PBG on Stage 9`;
 
   openModal(`${r.id} — Timestamped approval gate`, `
     <div class="consol-detail-modal ca-form-modal">
@@ -8007,8 +8765,8 @@ function openContractApprovalDetail(contractId) {
       <div class="ca-policy-note">
         <i class="fa-solid fa-scale-balanced"></i>
         <div>
-          <strong>Execution gate — signed post LOI acceptance and PBG receive</strong>
-          <p>Terms below are synced from NIC / DVDMS / tender templates. Record Approve / Clarify / Reject with timestamp only. Do not re-key master T&amp;C here.</p>
+          <strong>Budget Officer approval — blocked until PBG is recorded on Stage 9</strong>
+          <p>Creating a contract (RM) does <em>not</em> approve it. Finance / Budget Officer records PBG, then Approve / Clarify / Reject with timestamp.</p>
         </div>
       </div>
 
@@ -8020,8 +8778,8 @@ function openContractApprovalDetail(contractId) {
             <tr><td>Contract ID</td><td><strong>${r.id}</strong></td></tr>
             <tr><td>LOI / NOA</td><td><strong class="cell-nowrap">${r.noaNo}</strong> · ${r.noaDate && r.noaDate !== '—' ? r.noaDate : '—'}</td></tr>
             <tr><td>LOI acknowledgement</td><td>${loiAck}</td></tr>
-            <tr><td>PBG status</td><td>${award?.pbgStatus || '—'} · ${award?.pbgRef || '—'}</td></tr>
-            <tr><td>Sign gate</td><td><strong>${gateOk ? 'Ready — LOI accept + PBG receive' : 'Blocked until LOI accept + PBG receive'}</strong></td></tr>
+            <tr><td>PBG status</td><td><strong>${pbgLabel}</strong></td></tr>
+            <tr><td>Approval gate</td><td><strong>${gateOk ? 'Ready — PBG recorded by Budget Officer' : 'Blocked until PBG recorded on Stage 9'}</strong></td></tr>
             <tr><td>Agreement No.</td><td><strong>${r.agreementNo}</strong></td></tr>
             <tr><td>Legal / Finance</td><td><span class="badge badge-${needStatusBadge(r.legalStatus)}">${r.legalStatus}</span> · <span class="badge badge-${needStatusBadge(r.financeStatus)}">${r.financeStatus}</span></td></tr>
             <tr><td>Period / delivery / PBG / LD</td><td>${f.contractPeriod} · ${f.deliveryTerms} · ${f.pbgRequired} · ${f.ldClause}</td></tr>
@@ -8063,12 +8821,23 @@ function openContractApprovalDetail(contractId) {
         </div>
       </div>
 
+      ${!pbgOk && !locked ? `
+        <div class="ca-policy-note" style="margin-bottom:1rem;border-color:#f59e0b;background:#fffbeb">
+          <i class="fa-solid fa-triangle-exclamation" style="color:#d97706"></i>
+          <div>
+            <strong>PBG not recorded yet</strong>
+            <p>Go to <strong>Stage 9 → Record PBG</strong> as Finance / Budget Officer, then return here to Approve.</p>
+            ${isBudgetOfficer() ? `<button type="button" class="btn btn-outline btn-sm" style="margin-top:0.5rem" onclick="closeModal();selectWorkflowStep(9);setTimeout(()=>openRecordPbgForm('${r.id}'),80)"><i class="fa-solid fa-building-columns"></i> Record PBG now</button>` : ''}
+          </div>
+        </div>
+      ` : ''}
+
       ${locked ? `
         <div class="ca-decision-banner ca-decision-banner--${(f.decision || '').toLowerCase().replace(/\s+/g, '-')}">
           <i class="fa-solid fa-${f.decision === 'Approved' ? 'circle-check' : f.decision === 'Rejected' ? 'circle-xmark' : 'circle-info'}"></i>
           <div>
             <strong>Decision recorded: ${f.decision}</strong>
-            <p>Timestamp locked. Synced T&amp;C remain available in Contract Management.</p>
+            <p>Timestamp locked. Proceed to Stage 11 to issue the approved contract to the vendor.</p>
           </div>
         </div>
         <div class="modal-inline-actions">
@@ -8078,9 +8847,11 @@ function openContractApprovalDetail(contractId) {
       ` : `
         <div class="modal-inline-actions ca-form-actions">
           <button type="button" class="btn btn-outline" onclick="modalGoBack()"><i class="fa-solid fa-arrow-left"></i> Back</button>
+          ${isBudgetOfficer() ? `
           <button type="button" class="btn btn-outline" onclick="submitContractApprovalForm('${r.id}','clarify')"><i class="fa-solid fa-envelope-open-text"></i> Seek clarification</button>
           <button type="button" class="btn btn-outline ca-btn-reject" onclick="submitContractApprovalForm('${r.id}','reject')"><i class="fa-solid fa-ban"></i> Reject</button>
-          <button type="button" class="btn btn-primary" onclick="submitContractApprovalForm('${r.id}','approve')"><i class="fa-solid fa-stamp"></i> Approve with timestamp</button>
+          <button type="button" class="btn btn-primary" onclick="submitContractApprovalForm('${r.id}','approve')" ${!pbgOk ? 'disabled title="Record PBG on Stage 9 first"' : ''}><i class="fa-solid fa-stamp"></i> Approve with timestamp</button>
+          ` : `<span class="download-confirm-hint" style="margin:0">View only for Resource Manager. Log in as <strong>Finance / Budget Officer</strong> (<code>budget@mphp.gov.in</code>) to Approve after recording PBG on Stage 9.</span>`}
         </div>
       `}
     </div>
@@ -8123,6 +8894,14 @@ function captureContractApprovalForm(contractId) {
 function submitContractApprovalForm(contractId, action) {
   const r = (typeof CONTRACT_APPROVAL_DATA !== 'undefined' ? CONTRACT_APPROVAL_DATA.contracts : []).find(c => c.id === contractId);
   if (!r) return;
+  if (action === 'approve' && !isBudgetOfficer()) {
+    showWfAlert('Only Finance / Budget Officer can approve contracts.');
+    return;
+  }
+  if ((action === 'clarify' || action === 'reject') && !isBudgetOfficer()) {
+    showWfAlert('Only Finance / Budget Officer can record Clarify / Reject on contracts.');
+    return;
+  }
   if (r.status === 'Awaiting L1 lock') {
     showWfAlert('L1 is not yet locked for this tender. Complete bid evaluation before contract approval.');
     return;
@@ -8130,34 +8909,20 @@ function submitContractApprovalForm(contractId, action) {
 
   const form = captureContractApprovalForm(contractId);
   if (!form.authority || !form.designation || !form.sanctionRef) {
-    showWfAlert('Approving authority, designation and sanction reference must be present on the synced record.');
+    showWfAlert('Approving authority, designation and sanction reference must be present on the record.');
     return;
   }
   if (!form.remarks) {
-    form.remarks = action === 'approve' ? 'Approved on synced DVDMS/NIC/tender terms.' : 'Decision recorded.';
+    form.remarks = action === 'approve' ? 'Approved by Finance / Budget Officer after PBG check.' : 'Decision recorded.';
   }
 
   if (action === 'approve') {
-    const award = (typeof AWARD_STAGE_DATA !== 'undefined' ? AWARD_STAGE_DATA.awards : []).find(a => a.contractId === contractId || a.tenderId === r.tenderId);
-    const loiAck = award?.loaAck;
-    const pbgOk = award?.pbgStatus === 'Received' || r.status === 'Agreement signed';
-    if (loiAck && loiAck !== 'Acknowledged' && loiAck !== '—') {
-      showWfAlert('Contract cannot be signed until LOI / LOA is acknowledged by the vendor.');
+    if (!isPbgRecordedForContract(r)) {
+      showWfAlert('PBG issuance has not been recorded by Finance / Budget Officer. Contract approval is blocked until PBG is recorded on Stage 9.');
       return;
     }
-    if (award && !pbgOk && award.pbgStatus === 'Pending') {
-      showWfAlert('Contract cannot be signed until PBG is received (post LOI acceptance).');
-      return;
-    }
-    const missing = Object.entries(form.checks).filter(([, v]) => !v).map(([k]) => k);
-    if (missing.length) {
-      showWfAlert('Synced pre-conditions are incomplete for this award. Review Contract Management before approving.');
-      return;
-    }
-    if (r.legalStatus === 'Not started' || r.financeStatus === 'Not started') {
-      showWfAlert('Legal and finance clearance should be at least under review before final contract approval.');
-      return;
-    }
+    form.authority = form.authority || `${authUser?.name || 'Budget Officer'} — Finance / Budget Officer`;
+    form.designation = 'Finance / Budget Officer — Contract Approving Officer';
   }
 
   const today = typeof formatDateDMY === 'function' ? formatDateDMY(APP_TODAY) : '03-09-2026';
@@ -8253,8 +9018,8 @@ function renderAwardStage(canEdit = true) {
   return `<div class="tender-prep-stage">
     <div class="indent-mode-banner">
       <div>
-        <strong>Award — LOA, PBG &amp; checklist</strong>
-        <p>${data.meta.note}</p>
+        <strong>Contract Award — issue approved contract to vendor</strong>
+        <p>Resource Manager issues the approved contract to the vendor and activates the award. Requires Stage 10 approval by Budget Officer.</p>
       </div>
       <span class="badge badge-info"><i class="fa-solid fa-calendar-days"></i> ${periodLabel}</span>
     </div>
@@ -8263,18 +9028,18 @@ function renderAwardStage(canEdit = true) {
       <div class="budget-pr-chip"><span>Awards active</span><strong>${active}</strong></div>
       <div class="budget-pr-chip"><span>PBG pending</span><strong>${pbgPending}</strong></div>
       <div class="budget-pr-chip"><span>Shown</span><strong>${rows.length}</strong></div>
-      <div class="budget-pr-chip"><span>Last updated</span><strong>${data.meta.lastUpdated}</strong></div>
+      <div class="budget-pr-chip"><span>Desk</span><strong>Resource Manager</strong></div>
     </div>
 
     <section class="budget-section" id="awardStageTable">
       <div class="data-table-wrap need-table">
         ${renderGovStageListHeader({
-          title: 'Tenders awarded — status by category &amp; division',
+          title: 'Contract awards — issue to vendor',
           stageKey: 'award',
           filterState: govAwardState,
           selectId: 'awardStageCategory',
           categoryOptions,
-          lead: 'Click a row for LOA details, PBG collection status and checklist progress.'
+          lead: 'Open a row to <strong>Issue approved contract to vendor</strong> when Stage 10 approval is complete.'
         })}
         <div class="data-table-scroll">
         <table class="data-table consol-detail-table tender-prep-table">
@@ -8391,17 +9156,68 @@ function openAwardStageDetail(awardId) {
       <h4 class="budget-subhead">Award checklist for this tender</h4>
       <div class="budget-checklist">${checks}</div>
       <div class="modal-inline-actions">
-        <button type="button" class="btn btn-primary" onclick="closeModal()"><i class="fa-solid fa-xmark"></i> Close</button>
+        <button type="button" class="btn btn-outline" onclick="closeModal()"><i class="fa-solid fa-xmark"></i> Close</button>
         <button type="button" class="btn btn-outline" onclick="openStageFollowUpModal('award','row','${r.id}')">
           <i class="fa-solid fa-envelope-open-text"></i> Take Follow-up
         </button>
+        ${isResourceManagerDesk() ? `
+        <button type="button" class="btn btn-primary" onclick="issueApprovedContractToVendor('${r.id}')">
+          <i class="fa-solid fa-paper-plane"></i> Issue approved contract to vendor
+        </button>` : ''}
       </div>
     </div>
   `, { wide: true, large: true, extraWide: true });
   bindGovStageCoverageFilter();
 }
 
-/* ========== Stage 10 Purchase Order ========== */
+function issueApprovedContractToVendor(awardId) {
+  if (!isResourceManagerDesk()) {
+    showWfAlert('Only Resource Manager can issue the approved contract to the vendor.');
+    return;
+  }
+  const award = (typeof AWARD_STAGE_DATA !== 'undefined' ? AWARD_STAGE_DATA.awards : []).find(a => a.id === awardId);
+  if (!award) return;
+  const contract = (typeof CONTRACT_APPROVAL_DATA !== 'undefined' ? CONTRACT_APPROVAL_DATA.contracts : [])
+    .find(c => c.id === award.contractId || c.tenderId === award.tenderId);
+  const approved = contract
+    && (contract.status === 'Agreement signed'
+      || govContractState.approvals[contract.id]?.decision === 'Approved');
+  if (!approved) {
+    showWfAlert('Contract must be approved by Finance / Budget Officer on Stage 10 before issuing to the vendor.');
+    return;
+  }
+  const today = formatDateDMY(APP_TODAY);
+  award.status = 'Award active';
+  award.loaAck = award.loaAck === 'Pending' ? 'Acknowledged' : (award.loaAck || 'Acknowledged');
+  if (award.checklist) {
+    award.checklist.loa = true;
+    award.checklist.ack = true;
+    award.checklist.sign = true;
+    award.checklist.activate = true;
+  }
+  award.vendorIssuedOn = today;
+  award.vendorNotified = 'Notified';
+  if (contract) {
+    contract.status = 'Agreement signed';
+    contract.issuedToVendorOn = today;
+  }
+  try { persistGovLifecycle?.(); } catch (_) { /* optional */ }
+  closeModal();
+  refreshWorkflowUI();
+  openModal('Contract issued to vendor', `
+    <div class="sync-success-msg">
+      <div class="sync-success-icon"><i class="fa-solid fa-circle-check"></i></div>
+      <h4>Approved contract issued</h4>
+      <p><strong>${escapeHtmlLite(award.id)}</strong> · <strong>${escapeHtmlLite(award.title)}</strong> issued to <strong>${escapeHtmlLite(award.vendor)}</strong>.</p>
+      <p style="margin-top:0.5rem">Award status: <strong>Award active</strong> · Vendor notified (demo).</p>
+    </div>
+    <div class="modal-inline-actions" style="margin-top:1rem;justify-content:center">
+      <button type="button" class="btn btn-primary" onclick="closeModal()"><i class="fa-solid fa-xmark"></i> Close</button>
+    </div>
+  `);
+}
+
+/* ========== Stage 10 Purchase Order (legacy — not in CMVPMS timeline) ========== */
 function getPoStatusDate(r) {
   if (!r) return '—';
   if (r.poDate && r.poDate !== '—') return r.poDate;
@@ -8826,7 +9642,7 @@ function submitGeneratePurchaseOrder() {
 }
 
 /* ========== Stage 8 — Create contract form (CMVPMS) ========== */
-const CREATE_CONTRACT_SOURCE_PLACEHOLDER = 'Select award / LOA source…';
+const CREATE_CONTRACT_SOURCE_PLACEHOLDER = 'Select LOA (from Stage 8)…';
 const CREATE_CONTRACT_TEMPLATE_PLACEHOLDER = 'Select contract template…';
 
 function getContractFormTemplates() {
@@ -8838,23 +9654,117 @@ function getContractFormTemplates() {
   ];
 }
 
-function getEligibleCreateContractSources() {
+/** Pull tender / L1 details for an issued LOA (persisted LOA may only have loaNo from older demos). */
+function resolveLoaSourceMeta(rec, key) {
+  const evals = typeof BID_EVALUATION_DATA !== 'undefined' ? (BID_EVALUATION_DATA.evaluations || []) : [];
   const awards = typeof AWARD_STAGE_DATA !== 'undefined' ? (AWARD_STAGE_DATA.awards || []) : [];
-  return awards.filter(a =>
-    a.loaNo && a.loaNo !== '—'
-    && a.vendor && !String(a.vendor).includes('Pending')
-  );
+  const keyStr = String(key || '');
+  const ev = evals.find(e =>
+    e.id === rec.evalId
+    || e.id === key
+    || e.tenderId === rec.tenderId
+    || e.tenderId === key
+  ) || null;
+  const aw = awards.find(a =>
+    a.id === key
+    || a.id === rec.awardId
+    || a.loaNo === rec.loaNo
+    || a.tenderId === rec.tenderId
+    || a.tenderId === (ev && ev.tenderId)
+    || (ev && a.tenderId === ev.tenderId)
+  ) || null;
+  const tenderId = rec.tenderId || ev?.tenderId || aw?.tenderId || (keyStr.startsWith('TND-') ? keyStr : '');
+  const title = rec.title || ev?.title || aw?.title || tenderId || '—';
+  const vendor = rec.vendor || ev?.l1Vendor || aw?.vendor || '—';
+  const category = rec.category || ev?.category || aw?.category || 'Others';
+  const value = rec.value || ev?.l1Value || aw?.value || '—';
+  const state = rec.state || ev?.state || aw?.state || 'Madhya Pradesh';
+  const division = rec.division || ev?.division || aw?.division || '—';
+  const evalId = rec.evalId || ev?.id || '';
+  const tenderTail = String(tenderId || '').replace(/^TND-/, '') || String(Date.now()).slice(-4);
+  const contractId = (aw?.contractId && aw.contractId !== '—')
+    ? aw.contractId
+    : `CNT-${tenderTail}`;
+  return {
+    id: evalId || tenderId || keyStr,
+    evalId,
+    awardId: aw?.id || (keyStr.startsWith('AWD-') ? keyStr : ''),
+    tenderId: tenderId || '—',
+    title,
+    vendor,
+    category,
+    value,
+    state,
+    division,
+    contractId,
+    pbgAmount: aw?.pbgAmount || '—',
+    pbgStatus: aw?.pbgStatus || 'Pending'
+  };
+}
+
+/** Stage 9 sources = LOAs issued on Stage 8 (from Bid Evaluation), not Stage 11 awards. */
+function getEligibleCreateContractSources() {
+  const issued = govLoaState.issued || {};
+  const seen = new Set();
+  const rows = [];
+  Object.keys(issued).forEach(key => {
+    const rec = issued[key];
+    if (!rec || !rec.loaNo || rec.status !== 'LOA issued') return;
+    // Prefer the eval-/award-keyed copy; skip tender-keyed duplicate of the same object
+    if (String(key).startsWith('TND-') && (issued[rec.evalId] || Object.keys(issued).some(k =>
+      k !== key && issued[k] === rec && !String(k).startsWith('TND-')
+    ))) return;
+    const meta = resolveLoaSourceMeta(rec, key);
+    const dedupeKey = meta.evalId || meta.tenderId || rec.loaNo;
+    if (seen.has(dedupeKey) || seen.has(rec.loaNo)) return;
+    seen.add(dedupeKey);
+    seen.add(rec.loaNo);
+    rows.push({
+      ...meta,
+      loaNo: rec.loaNo,
+      loaDate: rec.loaDate || '—'
+    });
+    // Back-fill incomplete persisted LOA rows so Stage 9 stays complete next time
+    if (!rec.tenderId || !rec.title || !rec.vendor) {
+      Object.assign(rec, {
+        tenderId: meta.tenderId,
+        title: meta.title,
+        vendor: meta.vendor,
+        category: meta.category,
+        value: meta.value,
+        state: meta.state,
+        division: meta.division,
+        evalId: meta.evalId || rec.evalId
+      });
+    }
+  });
+  return rows;
 }
 
 function createContractSourceLabel(a) {
-  return `${a.id} — ${a.title} (${a.vendor})`;
+  return `${a.loaNo} — ${a.title} (${a.vendor})`;
 }
 
 function resolveCreateContractSource() {
   const label = typeof getCustomSelectValue === 'function' ? getCustomSelectValue('createCntSource') : '';
   if (!label || label === CREATE_CONTRACT_SOURCE_PLACEHOLDER) return null;
-  const id = (label.split(' — ')[0] || '').trim();
-  return getEligibleCreateContractSources().find(a => a.id === id) || null;
+  const loaNo = (label.split(' — ')[0] || '').trim();
+  return getEligibleCreateContractSources().find(a => a.loaNo === loaNo || a.id === loaNo) || null;
+}
+
+const CREATE_CONTRACT_PERIOD_OPTIONS = [
+  '12 months from agreement date',
+  '24 months from agreement date',
+  '36 months from agreement date',
+  'As per NIT / rate-contract period'
+];
+const CREATE_CONTRACT_PERIOD_PLACEHOLDER = 'Select contract period…';
+
+function resolveCreateContractPeriod() {
+  const fromSelect = typeof getCustomSelectValue === 'function' ? getCustomSelectValue('createCntPeriod') : '';
+  if (fromSelect && fromSelect !== CREATE_CONTRACT_PERIOD_PLACEHOLDER) return fromSelect;
+  return document.getElementById('createCntPeriodInput')?.value?.trim()
+    || '24 months from agreement date';
 }
 
 function resolveCreateContractTemplate() {
@@ -8866,7 +9776,7 @@ function resolveCreateContractTemplate() {
 function fillCreateContractFormFields(a) {
   const set = (id, val) => {
     const el = document.getElementById(id);
-    if (el) el.value = val == null || val === '' ? '' : String(val);
+    if (el) el.value = val == null || val === '' || val === 'undefined' ? '' : String(val);
   };
   if (!a) {
     ['createCntTenderId', 'createCntTitle', 'createCntCategory', 'createCntDivision',
@@ -8874,11 +9784,11 @@ function fillCreateContractFormFields(a) {
     ].forEach(id => set(id, ''));
     return;
   }
-  set('createCntTenderId', a.tenderId);
-  set('createCntTitle', a.title);
+  set('createCntTenderId', a.tenderId && a.tenderId !== '—' ? a.tenderId : '');
+  set('createCntTitle', a.title && a.title !== '—' ? a.title : '');
   set('createCntCategory', a.category);
   set('createCntDivision', `${a.state || 'Madhya Pradesh'} · ${a.division || '—'}`);
-  set('createCntVendor', a.vendor);
+  set('createCntVendor', a.vendor && a.vendor !== '—' ? a.vendor : '');
   set('createCntLoa', `${a.loaNo} · ${a.loaDate || '—'}`);
   set('createCntValue', a.value);
   set('createCntPbg', a.pbgAmount && a.pbgAmount !== '—' ? a.pbgAmount : '5% – 10% of contract value (SFMS / e-BG)');
@@ -8904,42 +9814,55 @@ function bindCreateContractSelectListeners() {
 
 function openCreateContractForm(preselectId) {
   if (currentRole !== 'gov') return;
-  const eligible = getEligibleCreateContractSources();
-  if (!eligible.length) {
-    showWfAlert('No LOA-linked awards are available to create a contract form right now.');
+  if (!isResourceManagerDesk()) {
+    showWfAlert('Only Resource Manager can create contracts. Finance / Budget Officer records PBG only.');
     return;
   }
-  const preselected = preselectId ? eligible.find(a => a.id === preselectId) : null;
+  const eligible = getEligibleCreateContractSources();
+  if (!eligible.length) {
+    showWfAlert('No issued LOAs available. Complete Stage 8 (Issue LOA from Bid Evaluation) first.');
+    return;
+  }
+  const preselected = preselectId
+    ? eligible.find(a => a.id === preselectId || a.evalId === preselectId || a.loaNo === preselectId)
+    : null;
   const templates = getContractFormTemplates();
   const sourceLabels = eligible.map(createContractSourceLabel);
   const templateLabels = templates.map(t => t.label);
   const sourceSelected = preselected ? createContractSourceLabel(preselected) : CREATE_CONTRACT_SOURCE_PLACEHOLDER;
-  const sourceSelect = customSelectHTML('Award / LOA source', 'createCntSource', sourceLabels, sourceSelected, true)
+  const sourceSelect = customSelectHTML('Issued LOA (Stage 8)', 'createCntSource', sourceLabels, sourceSelected, true)
     .replace('class="form-group"', 'class="form-group full"');
   const templateSelect = customSelectHTML('Contract template', 'createCntTemplate', templateLabels, CREATE_CONTRACT_TEMPLATE_PLACEHOLDER, true)
     .replace('class="form-group"', 'class="form-group full"');
+  const periodSelect = customSelectHTML(
+    'Contract period',
+    'createCntPeriod',
+    CREATE_CONTRACT_PERIOD_OPTIONS,
+    '24 months from agreement date',
+    true
+  );
 
   openModal('Create contract form', `
     <div class="indent-modal-form kpi-detail">
       <p class="consol-detail-lead" style="margin-top:0">
-        Prepare the contract management pack from a synced <strong>Award / LOA</strong> — LOI accept, PBG schedule and
-        standard T&amp;C are pulled from NIC / DVDMS / tender templates (no master-data re-keying). Submit to register
-        the draft under Stage 8 Contract Approval.
+        Prepare the contract pack from an <strong>LOA issued on Stage 8</strong> (L1 from Bid Evaluation).
+        Tender, title and L1 bidder are <strong>filled automatically</strong> from that LOA (not editable here).
+        Choose template and contract period below, then submit.
       </p>
 
-      <h4 class="budget-subhead">1. Source award</h4>
+      <h4 class="budget-subhead">1. Source LOA</h4>
       <div class="form-grid wf-form-grid">
         ${sourceSelect}
       </div>
 
-      <h4 class="budget-subhead">2. Tender &amp; bidder (synced)</h4>
+      <h4 class="budget-subhead">2. Tender &amp; bidder <span style="font-weight:500;color:#64748b">(auto-filled from LOA — not editable)</span></h4>
       <div class="form-grid wf-form-grid">
-        <div class="form-group"><label>Tender / RC No.</label><input id="createCntTenderId" type="text" readonly placeholder="—"></div>
+        <div class="form-group"><label>Tender / RC No.</label><input id="createCntTenderId" type="text" readonly placeholder="Select LOA above"></div>
         <div class="form-group"><label>Contract ID</label><input id="createCntContractId" type="text" readonly placeholder="—"></div>
-        <div class="form-group full"><label>Title</label><input id="createCntTitle" type="text" readonly placeholder="—"></div>
+        <div class="form-group full"><label>Title</label><input id="createCntTitle" type="text" readonly placeholder="Select LOA above"></div>
         <div class="form-group"><label>Category</label><input id="createCntCategory" type="text" readonly placeholder="—"></div>
         <div class="form-group"><label>State / Division</label><input id="createCntDivision" type="text" readonly placeholder="—"></div>
-        <div class="form-group"><label>L1 / selected bidder</label><input id="createCntVendor" type="text" readonly placeholder="—"></div>
+        <div class="form-group"><label>L1 / selected bidder</label><input id="createCntVendor" type="text" readonly placeholder="Select LOA above"></div>
         <div class="form-group"><label>LOA / LOI</label><input id="createCntLoa" type="text" readonly placeholder="—"></div>
         <div class="form-group"><label>Est. value</label><input id="createCntValue" type="text" readonly placeholder="—"></div>
         <div class="form-group"><label>PBG schedule</label><input id="createCntPbg" type="text" readonly placeholder="—"></div>
@@ -8950,9 +9873,7 @@ function openCreateContractForm(preselectId) {
         ${templateSelect}
         <p id="createCntTemplateHint" class="download-confirm-hint form-group full" style="margin:0"></p>
         ${datePickerHTML('createCntAgreementDate', '', 'Proposed agreement date')}
-        <div class="form-group"><label>Contract period</label>
-          <input id="createCntPeriod" type="text" value="24 months from agreement date" placeholder="e.g. 24 months from agreement date">
-        </div>
+        ${periodSelect}
         <div class="form-group full"><label>Delivery / SLA terms</label>
           <input id="createCntDelivery" type="text" value="As per NIT / rate-contract schedule" placeholder="Delivery or SLA terms">
         </div>
@@ -8972,14 +9893,28 @@ function openCreateContractForm(preselectId) {
 
   if (typeof initCustomSelects === 'function') initCustomSelects();
   bindCreateContractSelectListeners();
-  fillCreateContractFormFields(preselected || null);
+  const initial = preselected || (eligible.length === 1 ? eligible[0] : null);
+  if (initial && !preselected) {
+    const wrap = document.querySelector('.custom-select[data-select-id="createCntSource"]');
+    const label = createContractSourceLabel(initial);
+    const valEl = wrap?.querySelector('.custom-select-value');
+    if (valEl) valEl.textContent = label;
+    wrap?.querySelectorAll('.custom-select-option').forEach(o => {
+      o.classList.toggle('selected', o.dataset.value === label);
+    });
+  }
+  fillCreateContractFormFields(initial);
 }
 
 function submitCreateContractForm() {
   const award = resolveCreateContractSource();
   const template = resolveCreateContractTemplate();
   if (!award) {
-    showWfAlert('Please select an award / LOA source first.');
+    showWfAlert('Please select an issued LOA (Stage 8) first.');
+    return;
+  }
+  if (!award.tenderId || award.tenderId === '—' || !award.vendor || award.vendor === '—') {
+    showWfAlert('Selected LOA is missing tender / L1 details. Re-issue LOA from Bid Evaluation on Stage 8, then try again.');
     return;
   }
   if (!template) {
@@ -8989,12 +9924,16 @@ function submitCreateContractForm() {
 
   const today = formatDateDMY(APP_TODAY);
   const agreementDate = document.getElementById('createCntAgreementDate')?.value?.trim() || today;
-  const period = document.getElementById('createCntPeriod')?.value?.trim() || '24 months from agreement date';
+  const period = resolveCreateContractPeriod();
   const delivery = document.getElementById('createCntDelivery')?.value?.trim() || 'As per NIT / rate-contract schedule';
   const remarks = document.getElementById('createCntRemarks')?.value?.trim() || '';
-  const contractId = document.getElementById('createCntContractId')?.value?.trim()
+  let contractId = document.getElementById('createCntContractId')?.value?.trim()
     || award.contractId
     || `CNT-2026-${String(Date.now()).slice(-4)}`;
+  // Repair legacy demo IDs like CNT-AWD-2026-0098
+  if (/^CNT-AWD-/i.test(contractId) && award.contractId && !/^CNT-AWD-/i.test(award.contractId)) {
+    contractId = award.contractId;
+  }
 
   const approvalRow = {
     id: contractId,
@@ -9019,7 +9958,13 @@ function submitCreateContractForm() {
   };
 
   if (typeof CONTRACT_APPROVAL_DATA !== 'undefined' && Array.isArray(CONTRACT_APPROVAL_DATA.contracts)) {
-    const idx = CONTRACT_APPROVAL_DATA.contracts.findIndex(c => c.id === contractId || c.tenderId === award.tenderId);
+    // Drop broken legacy drafts like CNT-AWD-… with undefined tender/vendor
+    CONTRACT_APPROVAL_DATA.contracts = CONTRACT_APPROVAL_DATA.contracts.filter(c =>
+      !(String(c.id || '').startsWith('CNT-AWD-') && (!c.tenderId || c.tenderId === 'undefined' || !c.l1Vendor || c.l1Vendor === 'undefined'))
+    );
+    const idx = CONTRACT_APPROVAL_DATA.contracts.findIndex(c =>
+      c.id === contractId || (award.tenderId && c.tenderId === award.tenderId)
+    );
     if (idx >= 0) {
       CONTRACT_APPROVAL_DATA.contracts[idx] = { ...CONTRACT_APPROVAL_DATA.contracts[idx], ...approvalRow };
     } else {
@@ -9063,7 +10008,7 @@ function submitCreateContractForm() {
     openModal('Contract draft created', `
       <div class="sync-success-msg">
         <div class="sync-success-icon"><i class="fa-solid fa-circle-check"></i></div>
-        <h4>Contract form registered</h4>
+        <h4>Contract form registered (not approved yet)</h4>
         <p>
           <strong>${escapeHtmlLite(contractId)}</strong> drafted for
           <strong>${escapeHtmlLite(award.title)}</strong> · bidder
@@ -9071,13 +10016,13 @@ function submitCreateContractForm() {
         </p>
         <p style="margin-top:0.5rem">
           Template: <strong>${escapeHtmlLite(template.label)}</strong><br>
-          Status: <strong>NOA issued</strong> · open the approval gate to timestamp Approve / Clarify / Reject.
+          Next: <strong>Finance / Budget Officer</strong> records PBG on Stage 9, then Approves on Stage 10.
         </p>
       </div>
       <div class="modal-inline-actions" style="margin-top:1rem;justify-content:center">
         <button type="button" class="btn btn-outline" onclick="closeModal()"><i class="fa-solid fa-xmark"></i> Close</button>
-        <button type="button" class="btn btn-primary" onclick="closeModal();openContractApprovalDetail('${contractId}')">
-          <i class="fa-solid fa-stamp"></i> Open approval gate
+        <button type="button" class="btn btn-primary" onclick="closeModal();selectWorkflowStep(9)">
+          <i class="fa-solid fa-building-columns"></i> Go to Stage 9 (PBG)
         </button>
       </div>
     `);
@@ -11569,10 +12514,11 @@ function refreshNeedIdentificationApi() {
 }
 
 function renderWorkflowDetailPanel(step, progress, total) {
+  const govTotal = currentRole === 'gov' ? getGovWorkflowTotal() : total;
   const canEdit = currentRole === 'vendor'
     ? vendorCanEditStage(step.id, progress)
-    : (step.id <= progress || step.id === 14);
-  const showStatusBadge = step.id !== 14;
+    : (step.id <= progress || step.id === govTotal);
+  const showStatusBadge = currentRole === 'gov' ? step.id !== govTotal : true;
   let badgeKind;
   let badgeLabel;
   if (currentRole === 'vendor') {
@@ -11594,6 +12540,40 @@ function renderWorkflowDetailPanel(step, progress, total) {
     badgeKind = step.id < progress ? 'success' : step.id === progress ? 'info' : 'muted';
     badgeLabel = step.id < progress ? 'Completed' : step.id === progress ? 'In Progress' : 'Upcoming';
   }
+
+  let headerAction = showStatusBadge ? `<span class="badge badge-${badgeKind}">${badgeLabel}</span>` : '';
+  if (currentRole === 'gov' && step.id === 8 && isResourceManagerDesk()) {
+    headerAction = `<button type="button" class="btn btn-primary btn-sm" onclick="openIssueLoaForm()">
+      <i class="fa-solid fa-file-circle-plus"></i> Issue LOA
+    </button>`;
+  } else if (currentRole === 'gov' && step.id === 9) {
+    const actions = [];
+    if (isResourceManagerDesk()) {
+      actions.push(`<button type="button" class="btn btn-primary btn-sm" onclick="openCreateContractForm()">
+        <i class="fa-solid fa-file-contract"></i> Create contract form
+      </button>`);
+    }
+    if (isBudgetOfficer()) {
+      actions.push(`<button type="button" class="btn btn-primary btn-sm" onclick="openRecordPbgForm()">
+        <i class="fa-solid fa-building-columns"></i> Record PBG
+      </button>`);
+    }
+    if (actions.length) headerAction = `<div class="wf-header-actions" style="display:flex;gap:0.5rem;flex-wrap:wrap;justify-content:flex-end">${actions.join('')}</div>`;
+    else headerAction = `<span class="badge badge-muted">${isBudgetOfficer() ? 'Budget Officer — PBG desk' : 'Resource Manager — contract desk'}</span>`;
+  } else if (currentRole === 'gov' && step.id === 11 && isResourceManagerDesk()) {
+    headerAction = `<span class="badge badge-info">Issue approved contracts to vendors</span>`;
+  } else if (currentRole === 'gov' && step.id === 12 && isResourceManagerDesk()) {
+    headerAction = `<span class="badge badge-info">Quality Control status</span>`;
+  } else if (currentRole === 'gov' && step.id === 10) {
+    if (isBudgetOfficer()) {
+      headerAction = `<button type="button" class="btn btn-primary btn-sm" onclick="openNextPendingContractApproval()">
+        <i class="fa-solid fa-stamp"></i> Approve next (PBG check)
+      </button>`;
+    } else {
+      headerAction = `<span class="badge badge-muted">View only — Budget Officer approves</span>`;
+    }
+  }
+
   return `
     ${renderWorkflowViewBanner(step, progress)}
     <div class="wf-detail-header">
@@ -11609,11 +12589,7 @@ function renderWorkflowDetailPanel(step, progress, total) {
           : step.name}</h3>
         ${step.desc ? `<p>${step.desc}</p>` : ''}
       </div>
-      ${currentRole === 'gov' && step.id === 8
-        ? `<button type="button" class="btn btn-primary btn-sm" onclick="openCreateContractForm()">
-            <i class="fa-solid fa-file-contract"></i> Create contract form
-          </button>`
-        : (showStatusBadge ? `<span class="badge badge-${badgeKind}">${badgeLabel}</span>` : '')}
+      ${headerAction}
     </div>
     ${renderWorkflowChecklist(step)}
     ${renderWorkflowDetail(step, canEdit)}
@@ -11655,32 +12631,38 @@ function renderWorkflowDetail(step, canEdit = true) {
   }
 
   if (currentRole === 'gov' && step.id === 8) {
-    return renderContractApprovalStage(canEdit);
+    return renderLoaIssuanceStage(canEdit);
   }
 
   if (currentRole === 'gov' && step.id === 9) {
-    return renderAwardStage(canEdit);
+    return renderCreateContractPbgStage(canEdit);
   }
 
   if (currentRole === 'gov' && step.id === 10) {
-    return renderPurchaseOrderStage(canEdit);
+    return renderContractApprovalStage(canEdit);
   }
 
   if (currentRole === 'gov' && step.id === 11) {
-    return renderGrnInspectionStage(canEdit);
+    return renderAwardStage(canEdit);
   }
 
   if (currentRole === 'gov' && step.id === 12) {
-    return renderInvoiceMatchingStage(canEdit);
+    return renderQualityControlStage(canEdit);
   }
 
   if (currentRole === 'gov' && step.id === 13) {
-    return renderPaymentStage(canEdit);
+    return renderInvoiceMatchingStage(canEdit);
   }
 
   if (currentRole === 'gov' && step.id === 14) {
+    return renderPaymentStage(canEdit);
+  }
+
+  if (currentRole === 'gov' && step.id === 15) {
     return renderRenewalStage(canEdit);
   }
+
+  /* Legacy PO / GRN renderers retained but not wired into CMVPMS timeline (removed Stages). */
 
   if (currentRole === 'vendor' && step.id === 1) {
     const regCategories = getRegistrationCategories();
@@ -12782,16 +13764,8 @@ function renderVendorContractExecutionStage(canEdit = true) {
           onChange: 'handlePbgInlineUpload'
         })}
         ${renderInlineUpload({
-          id: 'wfInlineSbg',
-          title: '3. SBG document',
-          hint: 'Security BG if required by tender',
-          disabled: uploadDis || stageSubmitted || !loiOk,
-          fileName: pack.uploads?.sbg?.name,
-          onChange: 'handleContractSbgUpload'
-        })}
-        ${renderInlineUpload({
           id: 'wfInlineSow',
-          title: '4. SOW / scope confirmation',
+          title: '3. SOW / scope confirmation',
           hint: 'Signed SOW annexure · PDF',
           disabled: uploadDis || stageSubmitted || !loiOk,
           fileName: pack.uploads?.sow?.name,
@@ -12799,7 +13773,7 @@ function renderVendorContractExecutionStage(canEdit = true) {
         })}
         ${renderInlineUpload({
           id: 'wfInlineDeliverables',
-          title: '5. Deliverables / schedule',
+          title: '4. Deliverables / schedule',
           hint: 'Delivery plan vs tender schedule',
           disabled: uploadDis || stageSubmitted || !loiOk,
           fileName: pack.uploads?.deliverables?.name,
@@ -12807,7 +13781,7 @@ function renderVendorContractExecutionStage(canEdit = true) {
         })}
         ${renderInlineUpload({
           id: 'wfInlineContract',
-          title: '6. Signed contract',
+          title: '5. Signed contract',
           hint: 'Executed agreement · after PBG',
           disabled: uploadDis || stageSubmitted || !pbgReady || signedReady,
           fileName: pack.uploads?.signedContract?.name || pack.contractOcr?.fileName,
@@ -12837,7 +13811,7 @@ function renderVendorContractExecutionStage(canEdit = true) {
     <ol>
       <li>Pick tender reference (top right)</li>
       <li>Accept LOI and confirm draft sync</li>
-      <li>Upload PBG, SBG, SOW, deliverables &amp; signed contract</li>
+      <li>Upload PBG, SOW, deliverables &amp; signed contract</li>
     </ol>
   </div>`;
 
@@ -12923,23 +13897,6 @@ function handleContractLoiAcceptUpload(input) {
     syncVendorContractStateFromPack(tenderId);
     persistVendorLifecycle();
     showWfAlert(`LOI acceptance saved for <strong>${escapeHtmlLite(tenderId)}</strong>.`, 'success');
-  });
-}
-
-function handleContractSbgUpload(input) {
-  const file = input?.files?.[0];
-  if (!file) return;
-  const tenderId = vendorStageState.contract.tenderId;
-  if (!tenderId) {
-    showWfAlert('Select a tender before uploading documents.');
-    return;
-  }
-  simulateOcrDelay(() => {
-    const pack = ensureVendorContractPack(tenderId);
-    pack.uploads.sbg = { name: file.name, size: file.size };
-    syncVendorContractStateFromPack(tenderId);
-    persistVendorLifecycle();
-    showWfAlert(`SBG document attached to <strong>${escapeHtmlLite(tenderId)}</strong>.`, 'success');
   });
 }
 
@@ -13446,21 +14403,21 @@ function selectWorkflowStep(id) {
 
   if (currentRole === 'gov') {
     if (isGovCmvpmsLockedStage(id)) {
-      showWfAlert('CMVPMS starts at Stage 8 (Contract Approval). Stages 1–7 are locked and cannot be opened here.');
+      showWfAlert('CMVPMS starts at Stage 8 (LOA Issuance). Stages 1–7 are locked and cannot be opened here.');
       return;
     }
     const from = currentWorkflowStep;
-    // From Stage 8, Resource Manager may jump directly to Stage 14 (Renewal).
-    // After entering Stages 9–13, Stage 14 is only reachable sequentially (from 13 or already on 14).
-    if (id === 14 && from !== 14) {
+    const govTotal = getGovWorkflowTotal();
+    // From Stage 8, Resource Manager may jump directly to Renewal.
+    if (id === govTotal && from !== govTotal) {
       const allowedJump = from === GOV_CMVPMS_MIN_STAGE && !govSequentialCommitted;
-      const allowedSequential = from === 13 || govLifecycleComplete;
+      const allowedSequential = from === (govTotal - 1) || govLifecycleComplete;
       if (!allowedJump && !allowedSequential) {
-        showWfAlert('Once you proceed past Stage 8 into the sequential CMVPMS flow (Stage 9 onwards), you cannot jump directly to Renewal (Stage 14). Complete Stages 9–13 in order to reach Renewal sequentially.');
+        showWfAlert(`Once you proceed past Stage 8 into the sequential CMVPMS flow, you cannot jump directly to Renewal (Stage ${govTotal}). Complete the stages in order to reach Renewal sequentially.`);
         return;
       }
     }
-    if (id >= 9 && id <= 13) {
+    if (id >= 9 && id <= govTotal - 1) {
       govSequentialCommitted = true;
     }
   }
@@ -13563,13 +14520,14 @@ function refreshWorkflowUI() {
     if (currentRole === 'gov' && step.id === 5) bindPrBudgetCategorySelect();
     if (currentRole === 'gov' && step.id === 6) bindTenderPrepCategorySelect();
     if (currentRole === 'gov' && step.id === 7) bindBidEvalCategorySelect();
-    if (currentRole === 'gov' && step.id === 8) bindGovStageCategorySelect('contractApprovalCategory', setContractApprovalCategory);
-    if (currentRole === 'gov' && step.id === 9) bindGovStageCategorySelect('awardStageCategory', setAwardStageCategory);
-    if (currentRole === 'gov' && step.id === 10) bindGovStageCategorySelect('poStageCategory', setPoStageCategory);
-    if (currentRole === 'gov' && step.id === 11) bindGovStageCategorySelect('grnStageCategory', setGrnStageCategory);
-    if (currentRole === 'gov' && step.id === 12) bindGovStageCategorySelect('invoiceStageCategory', setInvoiceStageCategory);
-    if (currentRole === 'gov' && step.id === 13) bindGovStageCategorySelect('paymentStageCategory', setPaymentStageCategory);
-    if (currentRole === 'gov' && step.id === 14) bindGovStageCategorySelect('renewalStageCategory', setRenewalStageCategory);
+    if (currentRole === 'gov' && step.id === 8) bindGovStageCategorySelect('loaIssuanceCategory', setLoaIssuanceCategory);
+    if (currentRole === 'gov' && step.id === 9) bindGovStageCategorySelect('contractPbgCategory', setContractApprovalCategory);
+    if (currentRole === 'gov' && step.id === 10) bindGovStageCategorySelect('contractApprovalCategory', setContractApprovalCategory);
+    if (currentRole === 'gov' && step.id === 11) bindGovStageCategorySelect('awardStageCategory', setAwardStageCategory);
+    if (currentRole === 'gov' && step.id === 12) bindGovStageCategorySelect('qcStageCategory', setQcCategory);
+    if (currentRole === 'gov' && step.id === 13) bindGovStageCategorySelect('invoiceStageCategory', setInvoiceStageCategory);
+    if (currentRole === 'gov' && step.id === 14) bindGovStageCategorySelect('paymentStageCategory', setPaymentStageCategory);
+    if (currentRole === 'gov' && step.id === 15) bindGovStageCategorySelect('renewalStageCategory', setRenewalStageCategory);
     if (currentRole === 'vendor' && step.id === 5) bindVendorAwardSyncCategorySelect();
     if (currentRole === 'vendor' && step.id === 6) {
       bindContractTenderSelectListener();
@@ -14326,7 +15284,7 @@ function renderGovReports() {
           <table class="data-table" id="tblGovVendors">
             <thead><tr><th>Vendor ID</th><th>Name</th><th>Category</th>${PERF_METRICS.map(m => `<th>${m.label}</th>`).join('')}<th>Overall</th><th>Status</th></tr></thead>
             <tbody>
-              ${ds.vendors.length ? ds.vendors.map(v => `<tr>
+              ${ds.vendors.length ? ds.vendors.map(v => `<tr class="need-row-clickable" role="button" tabindex="0" title="View metric justifications" onclick="openVendorDetail('${v.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openVendorDetail('${v.id}')}">
                 <td><strong>${v.id}</strong></td><td>${v.name}</td><td>${v.category}</td>
                 ${PERF_METRICS.map(m => `<td>${v[m.key] ?? '—'}</td>`).join('')}
                 <td><strong>${v.overall}</strong></td>
@@ -20419,133 +21377,6 @@ function closeAlertPanel() {
   document.getElementById('alertPanel')?.classList.remove('open');
 }
 
-// ========== GOV NOTICES (website load — before login) ==========
-function getPublicGovNotices() {
-  if (typeof GOV_NOTICES === 'undefined') return [];
-  // Public broadcast: show all active notices (prefer unread first)
-  return [...GOV_NOTICES].sort((a, b) => {
-    const rank = { critical: 0, high: 1, medium: 2 };
-    if (!!b.unread !== !!a.unread) return a.unread ? -1 : 1;
-    return (rank[a.priority] ?? 9) - (rank[b.priority] ?? 9);
-  });
-}
-
-function getUnreadGovNotices() {
-  return (typeof GOV_NOTICES !== 'undefined' ? GOV_NOTICES : []).filter(n => n.unread);
-}
-
-function isUserLoggedIn() {
-  return !!currentRole && document.getElementById('app')?.classList.contains('active');
-}
-
-/** Show official government notices on the login / landing page */
-function showGovNoticesOnWebsiteLoad(force = false) {
-  if (!force && noticesShownThisSession) return;
-  const notices = getPublicGovNotices();
-  if (!notices.length) return;
-  noticesShownThisSession = true;
-  openNoticeModal(notices);
-}
-
-function openNoticeModal(notices) {
-  const overlay = document.getElementById('noticeOverlay');
-  const body = document.getElementById('noticeModalBody');
-  if (!overlay || !body) return;
-
-  const list = notices || getPublicGovNotices();
-  const critical = list.filter(n => n.priority === 'critical').length;
-  const unread = list.filter(n => n.unread).length;
-  const loggedIn = isUserLoggedIn();
-
-  const continueBtn = document.getElementById('noticeContinueBtn');
-  if (continueBtn) {
-    continueBtn.textContent = loggedIn ? 'Continue to Dashboard' : 'Continue to Sign In';
-  }
-
-  body.innerHTML = `
-    <div class="notice-summary">
-      <div class="notice-summary-text">
-        <strong>${list.length} official notice${list.length === 1 ? '' : 's'}</strong> from the Government / Resource Manager
-        ${critical ? `<span class="notice-critical-chip">${critical} critical</span>` : ''}
-        ${unread ? `<span class="notice-unread-chip">${unread} new</span>` : ''}
-      </div>
-      <p>${loggedIn
-        ? 'Please review these official communications. You can reopen them anytime from the notification bell.'
-        : 'These government announcements are shown to all visitors. Sign in to take action on tenders, bids, or contracts.'}</p>
-    </div>
-    <div class="notice-list">
-      ${list.map(n => renderNoticeCard(n, loggedIn)).join('')}
-    </div>
-  `;
-
-  overlay.classList.add('open');
-  overlay.setAttribute('aria-hidden', 'false');
-  document.body.style.overflow = 'hidden';
-}
-
-function renderNoticeCard(n, loggedIn) {
-  const priorityClass = n.priority === 'critical' ? 'critical' : n.priority === 'high' ? 'high' : 'medium';
-  const canAct = loggedIn && n.actionPage;
-  return `<article class="notice-card notice-card--${priorityClass}${n.unread ? '' : ' notice-card--read'}" data-notice-id="${n.id}">
-    <div class="notice-card-top">
-      <span class="notice-priority notice-priority--${priorityClass}">${n.priority}</span>
-      <span class="notice-category">${n.category}</span>
-      ${n.unread ? '<span class="notice-new-dot">New</span>' : ''}
-      <span class="notice-ref">${n.ref}</span>
-    </div>
-    <h3 class="notice-card-title">${n.title}</h3>
-    <p class="notice-card-msg">${n.msg}</p>
-    <div class="notice-card-meta">
-      <span><i class="fa-solid fa-building-columns"></i> ${n.from}</span>
-      <span><i class="fa-regular fa-calendar"></i> ${n.date} · ${n.time}</span>
-    </div>
-    <div class="notice-card-actions">
-      ${n.unread ? `<button type="button" class="btn btn-outline btn-sm" onclick="acknowledgeNotice('${n.id}')">Mark as read</button>` : ''}
-      ${canAct
-        ? `<button type="button" class="btn btn-primary btn-sm" onclick="actOnNotice('${n.id}','${n.actionPage}')">${n.actionLabel || 'Open'}</button>`
-        : `<span class="notice-signin-hint"><i class="fa-solid fa-lock"></i> Sign in to act on this notice</span>`}
-    </div>
-  </article>`;
-}
-
-function acknowledgeNotice(id) {
-  const notice = GOV_NOTICES.find(n => n.id === id);
-  if (notice) notice.unread = false;
-
-  const related = ALERTS_VENDOR.find(a => a.unread && (
-    (notice?.ref && a.msg.includes(notice.ref.split('-').pop())) ||
-    a.title.toLowerCase().includes((notice?.category || '').toLowerCase())
-  ));
-  if (related) related.unread = false;
-
-  if (isUserLoggedIn()) renderTopbar();
-  openNoticeModal(getPublicGovNotices());
-}
-
-function acknowledgeAllNotices() {
-  GOV_NOTICES.forEach(n => { n.unread = false; });
-  ALERTS_VENDOR.forEach(a => { a.unread = false; });
-  if (isUserLoggedIn()) renderTopbar();
-  closeNoticeModal();
-}
-
-function actOnNotice(id, page) {
-  if (!isUserLoggedIn()) {
-    closeNoticeModal();
-    return;
-  }
-  acknowledgeNotice(id);
-  closeNoticeModal();
-  if (page) navigateTo(page);
-}
-
-function closeNoticeModal() {
-  const overlay = document.getElementById('noticeOverlay');
-  overlay?.classList.remove('open');
-  overlay?.setAttribute('aria-hidden', 'true');
-  document.body.style.overflow = '';
-}
-
 function renderAlerts() {
   const list = document.getElementById('alertList');
   const alerts = currentRole === 'gov' ? ALERTS_GOV : ALERTS_VENDOR;
@@ -20851,7 +21682,7 @@ function openGovKpiDetail(key, opts = {}) {
                 <th>Status</th>
               </tr></thead>
               <tbody>
-                ${vendors.length ? vendors.map((v, i) => `<tr onclick="openVendorDetail('${v.id}')">
+                ${vendors.length ? vendors.map((v, i) => `<tr class="need-row-clickable" role="button" tabindex="0" title="View metric justifications" onclick="openVendorDetail('${v.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openVendorDetail('${v.id}')}">
                   <td>${i + 1}</td>
                   <td class="cell-vendor"><strong>${v.name}</strong><div class="cell-sub">${v.id}</div></td>
                   ${metrics.map(m => `<td>${v[m.key] ?? '—'}</td>`).join('')}
@@ -20887,7 +21718,7 @@ function openMetricWeightDetail(metricKey) {
           <table class="data-table data-table--modal">
             <thead><tr><th>Rank</th><th>Vendor</th><th>${metric.label}</th><th>Overall</th><th>Status</th></tr></thead>
             <tbody>
-              ${vendors.map((v, i) => `<tr onclick="openVendorDetail('${v.id}')">
+              ${vendors.map((v, i) => `<tr class="need-row-clickable" title="View metric justifications" onclick="openVendorDetail('${v.id}')">
                 <td>${i + 1}</td>
                 <td class="cell-vendor"><strong>${v.name}</strong><div class="cell-sub">${v.category}</div></td>
                 <td><strong>${v[metricKey]}</strong></td>
@@ -21146,7 +21977,7 @@ function openChartTrendDetail(chartKey, seriesLabel, periodLabel, value) {
             <table class="data-table data-table--modal">
               <thead><tr><th>S.No</th><th>Vendor</th><th>Category</th><th>Quality</th><th>Timely Delivery</th><th>Costing</th><th>Overall</th><th>Status</th></tr></thead>
               <tbody>
-                ${vendors.map((v, i) => `<tr onclick="openVendorDetail('${v.id}')">
+                ${vendors.map((v, i) => `<tr class="need-row-clickable" title="View metric justifications" onclick="openVendorDetail('${v.id}')">
                   <td>${i + 1}</td>
                   <td><strong>${v.name}</strong></td>
                   <td>${v.category}</td>
@@ -21308,20 +22139,113 @@ function openChartPeriodDetail(seriesLabel, periodLabel) {
   `, { wide: true });
 }
 
-function openVendorDetail(id) {
+function openVendorDetail(id, focusMetricKey = null) {
   const raw = VENDORS.find(x => x.id === id);
   if (!raw) return;
   const v = adjustVendorScores(raw, getAnalyticsScoreFactor());
   const metrics = typeof PERF_METRICS !== 'undefined' ? PERF_METRICS : [];
-  openModal(`${v.id} — ${v.name}`, `<div class="drill-simple">
-    <p><strong>Overall Score:</strong> ${v.overall} · <strong>Status:</strong> ${v.status} · <strong>Category:</strong> ${v.category}</p>
-    <div class="tender-detail-stats mt-2">
-      ${metrics.map(m => {
-        const points = getVendorMetricPoints(v, m);
-        return `<div class="tender-stat"><span>${escapeHtmlLite(m.label)}</span><strong>${points}</strong></div>`;
-      }).join('')}
+  const totalW = metrics.reduce((s, m) => s + m.weight, 0) || 100;
+  const overall = computeVendorOverallScore(v);
+  const meta = (typeof VENDOR_PERF_JUSTIFICATIONS !== 'undefined' && VENDOR_PERF_JUSTIFICATIONS[raw.id]) || {};
+  const statusClass = v.status === 'Preferred' ? 'success' : v.status === 'Watch' ? 'danger' : 'info';
+  const activeKey = focusMetricKey || metrics[0]?.key || null;
+  const shownMetrics = activeKey
+    ? metrics.filter(m => m.key === activeKey)
+    : metrics;
+
+  const scoreStrip = metrics.map(m => {
+    const pts = getVendorMetricPoints(v, m);
+    return `<button type="button" class="vperf-score-chip${activeKey === m.key ? ' active' : ''}" onclick="openVendorDetail('${raw.id}','${m.key}')">
+      <span>${escapeHtmlLite(m.label)}</span><strong>${pts}</strong>
+    </button>`;
+  }).join('');
+
+  const panels = shownMetrics.map(m => {
+    const pts = getVendorMetricPoints(v, m);
+    const tone = getVendorMetricBarTone(pts);
+    const detail = getVendorMetricJustificationDetail(raw.id, m, pts);
+    const contrib = Math.round((pts * m.weight / totalW) * 10) / 10;
+    const inputRows = (detail.inputs || []).map(([k, val]) =>
+      `<tr><td>${escapeHtmlLite(k)}</td><td><strong>${escapeHtmlLite(val)}</strong></td></tr>`
+    ).join('');
+    const head = (detail.columns || []).map(c => `<th>${escapeHtmlLite(c)}</th>`).join('');
+    const body = (detail.rows || []).map(r =>
+      `<tr>${r.map(c => `<td>${escapeHtmlLite(c)}</td>`).join('')}</tr>`
+    ).join('');
+    return `<section class="vperf-verify" id="vperf-metric-${m.key}" style="--metric-color:${m.color}">
+      <div class="vperf-verify-head">
+        <div>
+          <h4>${escapeHtmlLite(m.label)} = ${pts}</h4>
+          <p class="vperf-verify-calc"><code>${escapeHtmlLite(detail.calc || `${pts}`)}</code></p>
+        </div>
+        <div class="vperf-verify-score">
+          <strong class="vperf-score-tone-${tone}">${pts}</strong>
+          <span>wt ${m.weight}% · contrib ${contrib}</span>
+        </div>
+      </div>
+      <div class="vperf-verify-grid">
+        <div class="data-table-wrap vperf-verify-table">
+          <div class="table-header"><h3>Basis figures</h3></div>
+          <table class="data-table data-table--modal">
+            <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
+            <tbody>${inputRows || emptyTableRow(2, 'No figures available.')}</tbody>
+          </table>
+        </div>
+        <div class="data-table-wrap vperf-verify-table">
+          <div class="table-header"><h3>Verification records</h3></div>
+          <table class="data-table data-table--modal">
+            <thead><tr>${head || '<th>Record</th>'}</tr></thead>
+            <tbody>${body || emptyTableRow(detail.columns?.length || 1, 'No records available.')}</tbody>
+          </table>
+        </div>
+      </div>
+    </section>`;
+  }).join('');
+
+  const titleMetric = metrics.find(m => m.key === activeKey)?.label || 'Metric';
+
+  openModal(`${v.id} — ${titleMetric}`, `
+    <div class="vperf-detail vperf-detail--data">
+      <div class="vperf-detail-hero">
+        <div>
+          <h3>${escapeHtmlLite(v.name)}</h3>
+          <p class="vperf-detail-sub">
+            <span>${escapeHtmlLite(v.id)}</span>
+            <span>${escapeHtmlLite(v.category)}</span>
+            <span class="badge badge-${statusClass}">${escapeHtmlLite(v.status)}</span>
+            <span>${escapeHtmlLite(meta.assessmentPeriod || '01-04-2026 — 31-08-2026')}</span>
+          </p>
+        </div>
+        <div class="vperf-detail-overall">
+          <span class="vperf-detail-overall-num">${overall}</span>
+          <span class="vperf-detail-overall-label">Overall</span>
+        </div>
+      </div>
+      <div class="vperf-score-strip">
+        ${scoreStrip}
+      </div>
+      ${panels}
     </div>
-  </div>`, { wide: true });
+  `, { wide: true, large: true, extraWide: true });
+}
+
+function getVendorMetricJustificationDetail(vendorId, metric, points) {
+  const pack = (typeof VENDOR_PERF_JUSTIFICATIONS !== 'undefined' && VENDOR_PERF_JUSTIFICATIONS[vendorId]) || null;
+  const specific = pack?.metrics?.[metric.key];
+  if (specific) {
+    return {
+      calc: specific.calc || String(points),
+      inputs: specific.inputs || [],
+      columns: specific.columns || [],
+      rows: specific.rows || []
+    };
+  }
+  return {
+    calc: String(points),
+    inputs: [['Recorded score', String(points)], ['Weight', `${metric.weight}%`]],
+    columns: ['Field', 'Value'],
+    rows: [['Metric', metric.label], ['Score', String(points)]]
+  };
 }
 
 function closeModal() {
@@ -21340,15 +22264,8 @@ function bindPageEvents() {
   document.getElementById('modalOverlay')?.addEventListener('click', e => {
     if (e.target.id === 'modalOverlay') closeModal();
   });
-  document.getElementById('noticeOverlay')?.addEventListener('click', e => {
-    if (e.target.id === 'noticeOverlay') closeNoticeModal();
-  });
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
-    if (document.getElementById('noticeOverlay')?.classList.contains('open')) {
-      closeNoticeModal();
-      return;
-    }
     if (document.getElementById('modalOverlay')?.classList.contains('open')) {
       if (modalHistory.length) modalGoBack();
       else closeModal();
@@ -21932,6 +22849,4 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   initAuth();
   bindPageEvents();
-  // Official gov notices appear on the login page as soon as the website loads
-  setTimeout(() => showGovNoticesOnWebsiteLoad(), 450);
 });

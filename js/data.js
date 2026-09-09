@@ -10,13 +10,14 @@ const GOV_WORKFLOW = [
   { id: 5, name: 'PR & Budget Approval', desc: 'Purchase requisition with budget head allocation and administrative/financial sanction.', status: 'pending' },
   { id: 6, name: 'Tender Preparation', desc: 'System prepares NIT/RFP draft from prior stage data; division checkers upload consensus; final tender is issued.', status: 'pending' },
   { id: 7, name: 'Bid Evaluation', desc: 'System-assisted technical and financial bid evaluation; custom evaluation sheet generated for each tender.', status: 'pending' },
-  { id: 8, name: 'Contract Approval', desc: 'Approve agreement from DVDMS / NIC / tender-synced terms (LOI, PBG, T&C). Decision with timestamp only — no re-keying of master data.', status: 'pending' },
-  { id: 9, name: 'Award', desc: 'Track awarded tenders with LOA details, PBG collection and award checklist synced from NIC / Contract Management.', status: 'pending' },
-  { id: 10, name: 'Purchase Order', desc: 'PO raised in DVDMS after contract execution; delivery schedule and supply tracked in Contract Management.', status: 'pending' },
-  { id: 11, name: 'GRN & Inspection', desc: 'Goods receipt, quality testing, batch verification and acceptance certificate.', status: 'pending' },
-  { id: 12, name: 'Invoice Matching', desc: 'Three-way match: PO, GRN, and invoice verification.', status: 'pending' },
-  { id: 13, name: 'Payment', desc: 'Process payment within contract terms, apply LD if applicable.', status: 'pending' },
-  { id: 14, name: 'Renewal', desc: 'Review vendor renewals, attached tender documents, and finalize renewals as Resource Manager.', status: 'pending' }
+  { id: 8, name: 'LOA Issuance', desc: 'Resource Manager issues Letter of Award to the selected L1 / H1 bidder with value, timelines and conditions.', status: 'pending' },
+  { id: 9, name: 'Create Contract & PBG', desc: 'Resource Manager creates the contract pack from LOA. Finance / Budget Officer records PBG issuance only.', status: 'pending' },
+  { id: 10, name: 'Contract Approval', desc: 'Finance / Budget Officer approves the contract with timestamp — blocked until PBG is recorded.', status: 'pending' },
+  { id: 11, name: 'Contract Award', desc: 'Resource Manager issues the approved contract to the vendor and activates the award.', status: 'pending' },
+  { id: 12, name: 'Quality Control', desc: 'Resource Manager records Quality Control status separately from delivery / invoice processing.', status: 'pending' },
+  { id: 13, name: 'Invoice Matching', desc: 'Three-way match: PO, GRN, and invoice verification.', status: 'pending' },
+  { id: 14, name: 'Payment', desc: 'Process payment within contract terms, apply LD if applicable.', status: 'pending' },
+  { id: 15, name: 'Renewal', desc: 'Review vendor renewals, attached tender documents, and finalize renewals as Resource Manager.', status: 'pending' }
 ];
 
 const WORKFLOW_GUIDE_PATH = 'assets/MP-Health-Procurement-Lifecycle-Guide.html';
@@ -27,7 +28,7 @@ const VENDOR_STAGE_CHECKLIST = {
   3: ['Department review of registration & KYC', 'Confirm vendor code assignment (e.g. VND-MP-000123)', 'Approval notification on portal', 'Link approved profile to bidding'],
   4: ['Review tender and bid status in the table', 'Check EMD and document flags', 'Refresh to fetch the latest bid records', 'Confirm sync once bids appear to continue'],
   5: ['Review LOA / award records in the table', 'Check PBG due date and award value', 'Acknowledge LOA for issued awards', 'Confirm sync to continue lifecycle'],
-  6: ['Select tender for this contract pack', 'LOI issue → LOI accept → PBG submission', 'Review draft template synced with tender docs', 'Upload tender-specific PBG, SBG, SOW, deliverables & signed contract'],
+  6: ['Select tender for this contract pack', 'LOI issue → LOI accept → PBG submission', 'Review draft template synced with tender docs', 'Upload tender-specific PBG, SOW, deliverables & signed contract'],
   7: ['Review delivery records in the table', 'Check challan, GRN and dispatch status', 'Refresh to fetch the latest deliveries', 'Confirm sync once records appear to continue'],
   8: ['Raise invoice with GRN reference', 'Attach delivery & acceptance proof', 'Submit invoice on portal', 'Track invoice verification status'],
   9: ['Review payment records by tender and bid', 'Refresh to fetch the latest payment status', 'Open a payment row for invoice / PO / UTR detail', 'Confirm credit and close the invoice cycle'],
@@ -42,13 +43,14 @@ const GOV_STAGE_CHECKLIST = {
   5: ['Purchase requisition with budget head', 'Administrative sanction', 'Financial approval'],
   6: ['Draft NIT/RFP with BOQ', 'Eligibility, EMD, timelines', 'Evaluation method (L1/QCBS)'],
   7: ['Technical evaluation committee', 'Financial bid opening', 'L1/QCBS scoring'],
-  8: ['Confirm synced LOI / PBG / T&C from DVDMS–NIC–tender', 'Timestamped approval after LOI accept + PBG receive', 'Contract before PO gate'],
-  9: ['Issue LOA to L1 bidder', 'PBG collection', 'Contract signing'],
-  10: ['PO generation post-contract', 'Delivery schedule & terms', 'Vendor notification'],
-  11: ['GRN & quality inspection', 'Batch verification', 'Acceptance certificate'],
-  12: ['Three-way match: PO, GRN, Invoice', 'Deductions / LD if applicable', 'Finance verification'],
-  13: ['Payment processing', 'Audit trail entry', 'Contract closure records'],
-  14: ['Review renewal vendor list', 'Verify renewal period & status', 'Download attached tender / addendum / corrigendum PDFs', 'Finalize renewal with optional supporting document']
+  8: ['Select L1 / H1 bidder', 'Issue LOA with value & timelines', 'Record LOA number and date', 'Notify vendor for acknowledgement'],
+  9: ['Create contract form from LOA (Resource Manager)', 'Record PBG issuance (Budget Officer only)', 'Link agreement draft to LOA', 'Confirm PBG before approval'],
+  10: ['Verify PBG recorded', 'Review contract terms', 'Approve / Clarify / Reject with timestamp', 'Budget Officer decision only'],
+  11: ['Confirm contract approved', 'Issue approved contract to vendor', 'Activate award record', 'Unlock downstream invoice path'],
+  12: ['Set Quality Control status', 'Record inspector / remarks', 'Mark Passed / Failed / In progress', 'Keep QC separate from invoice matching'],
+  13: ['Three-way match: PO, GRN, Invoice', 'Deductions / LD if applicable', 'Finance verification'],
+  14: ['Payment processing', 'Audit trail entry', 'Contract closure records'],
+  15: ['Review renewal vendor list', 'Verify renewal period & status', 'Download attached tender / addendum / corrigendum PDFs', 'Finalize renewal with optional supporting document']
 };
 
 const VENDOR_STAGE_TIPS = {
@@ -67,8 +69,12 @@ const VENDOR_STAGE_TIPS = {
 const GOV_STAGE_TIPS = {
   4: 'Optimize from warehouse and inter-facility stock before fresh procurement.',
   7: 'Commercial bids open only for technically qualified vendors.',
-  8: 'Contract approval must precede PO generation per policy.',
-  12: 'Three-way match: PO, GRN, and Invoice before payment release.'
+  8: 'Issue LOA before creating the contract pack.',
+  9: 'Only Finance / Budget Officer can record PBG. Resource Manager creates the contract.',
+  10: 'Contract approval is blocked until PBG is recorded by Budget Officer.',
+  11: 'Issue the approved contract to the vendor to activate the award.',
+  12: 'Quality Control status is tracked separately from invoice matching.',
+  13: 'Three-way match: PO, GRN, and Invoice before payment release.'
 };
 
 /**
@@ -721,18 +727,18 @@ const CONTRACT_APPROVAL_DATA = {
     { id: 4, title: 'Timestamped approval', detail: 'Competent authority approves with timestamp after LOI accept + PBG receive — before PO.', status: 'Pending' }
   ],
   contracts: [
-    { id: 'CNT-2026-0042', tenderId: 'TND-2026-MP-0042', title: 'Essential Medicines Rate Contract', state: 'Madhya Pradesh', division: 'Bhopal', category: 'Drugs', status: 'Agreement signed', l1Vendor: 'MediSupply India', noaNo: 'NOA/MP/DRG/2026/042', noaDate: '30-08-2026', agreementNo: 'AGR/MP/2026/042', value: '₹11.9 Cr – ₹12.4 Cr', legalStatus: 'Cleared', financeStatus: 'Cleared', signedOn: '02-09-2026', remarks: 'Rate contract for 24 months; price fall clause included.' },
+    { id: 'CNT-2026-0042', tenderId: 'TND-2026-MP-0042', title: 'Essential Medicines Rate Contract', state: 'Madhya Pradesh', division: 'Bhopal', category: 'Drugs', status: 'Awaiting BO approval', l1Vendor: 'MediSupply India', noaNo: 'NOA/MP/DRG/2026/042', noaDate: '30-08-2026', agreementNo: 'Draft AGR/042', value: '₹11.9 Cr – ₹12.4 Cr', legalStatus: 'Cleared', financeStatus: 'Under review', signedOn: '—', remarks: 'Rate contract for 24 months; price fall clause included. Awaiting Budget Officer PBG + approval.' },
     { id: 'CNT-2026-0098', tenderId: 'TND-2026-MP-0098', title: 'Oncology Drug Supply 2026', state: 'Madhya Pradesh', division: 'Jabalpur', category: 'Drugs', status: 'NOA issued', l1Vendor: 'OncoCare Pharma', noaNo: 'NOA/MP/DRG/2026/098', noaDate: '05-08-2026', agreementNo: '— Pending', value: '₹7.9 Cr – ₹8.5 Cr', legalStatus: 'Under review', financeStatus: 'Cleared', signedOn: '—', remarks: 'Awaiting cold-chain SLA annexure in agreement draft.' },
     { id: 'CNT-2026-0078', tenderId: 'TND-2026-MP-0078', title: 'Paracetamol 500mg Bulk', state: 'Madhya Pradesh', division: 'Indore', category: 'Drugs', status: 'Awaiting L1 lock', l1Vendor: '— Pending evaluation', noaNo: '—', noaDate: '—', agreementNo: '—', value: '₹1.9 Cr – ₹2.3 Cr', legalStatus: 'Not started', financeStatus: 'Not started', signedOn: '—', date: '02-09-2026', remarks: 'Will start after commercial bid opening.' },
     { id: 'CNT-2026-0072', tenderId: 'TND-2026-MP-0072', title: 'Surgical Instruments Kit', state: 'Madhya Pradesh', division: 'Gwalior', category: 'Equipment', status: 'NOA issued', l1Vendor: 'Apex Surgical India', noaNo: 'NOA/MP/EQP/2026/072', noaDate: '01-09-2026', agreementNo: 'Draft AGR/072', value: '₹41 L – ₹48 L', legalStatus: 'Cleared', financeStatus: 'Under review', signedOn: '—', remarks: 'Warranty & AMC schedule under finance check.' },
-    { id: 'CNT-2026-0102', tenderId: 'TND-2026-MP-0102', title: 'Digital X-Ray Machines', state: 'Madhya Pradesh', division: 'Indore', category: 'Equipment', status: 'Agreement signed', l1Vendor: 'ImageMed Systems', noaNo: 'NOA/MP/EQP/2026/102', noaDate: '18-07-2026', agreementNo: 'AGR/MP/2026/102', value: '₹2.6 Cr – ₹3.0 Cr', legalStatus: 'Cleared', financeStatus: 'Cleared', signedOn: '25-07-2026', remarks: 'Installation milestones linked to payment schedule.' },
+    { id: 'CNT-2026-0102', tenderId: 'TND-2026-MP-0102', title: 'Digital X-Ray Machines', state: 'Madhya Pradesh', division: 'Indore', category: 'Equipment', status: 'Awaiting BO approval', l1Vendor: 'ImageMed Systems', noaNo: 'NOA/MP/EQP/2026/102', noaDate: '18-07-2026', agreementNo: 'Draft AGR/102', value: '₹2.6 Cr – ₹3.0 Cr', legalStatus: 'Cleared', financeStatus: 'Under review', signedOn: '—', remarks: 'Installation milestones linked to payment schedule. Awaiting Budget Officer PBG + approval.' },
     { id: 'CNT-2026-0055', tenderId: 'TND-2026-MP-0055', title: 'CT Scanner Procurement', state: 'Madhya Pradesh', division: 'Bhopal', category: 'Equipment', status: 'Awaiting L1 lock', l1Vendor: '— Pending evaluation', noaNo: '—', noaDate: '—', agreementNo: '—', value: '₹2.9 Cr – ₹3.5 Cr', legalStatus: 'Not started', financeStatus: 'Not started', signedOn: '—', date: '01-09-2026', remarks: 'QCBS evaluation still open.' },
-    { id: 'CNT-2026-0038', tenderId: 'TND-2026-MP-0038', title: 'Hospital Linen Supply', state: 'Madhya Pradesh', division: 'Bhopal', category: 'Consumables', status: 'Agreement signed', l1Vendor: 'CleanCare Supplies', noaNo: 'NOA/MP/CON/2026/038', noaDate: '22-07-2026', agreementNo: 'AGR/MP/2026/038', value: '₹78 L – ₹92 L', legalStatus: 'Cleared', financeStatus: 'Cleared', signedOn: '28-07-2026', remarks: 'Delivery schedule quarterly.' },
+    { id: 'CNT-2026-0038', tenderId: 'TND-2026-MP-0038', title: 'Hospital Linen Supply', state: 'Madhya Pradesh', division: 'Bhopal', category: 'Consumables', status: 'Awaiting BO approval', l1Vendor: 'CleanCare Supplies', noaNo: 'NOA/MP/CON/2026/038', noaDate: '22-07-2026', agreementNo: 'Draft AGR/038', value: '₹78 L – ₹92 L', legalStatus: 'Cleared', financeStatus: 'Under review', signedOn: '—', remarks: 'Delivery schedule quarterly. Awaiting Budget Officer PBG + approval.' },
     { id: 'CNT-2026-0091', tenderId: 'TND-2026-MP-0091', title: 'Disposable Gloves Supply', state: 'Madhya Pradesh', division: 'Jabalpur', category: 'Consumables', status: 'NOA issued', l1Vendor: 'SafeHands Consumables', noaNo: 'NOA/MP/CON/2026/091', noaDate: '02-09-2026', agreementNo: 'Draft AGR/091', value: '₹25 L – ₹30 L', legalStatus: 'Under review', financeStatus: 'Cleared', signedOn: '—', remarks: 'Sample acceptance certificate to be annexed.' },
-    { id: 'CNT-2026-0161', tenderId: 'TND-2026-MP-0161', title: 'Hospital Security Services', state: 'Madhya Pradesh', division: 'Bhopal', category: 'Services', status: 'Agreement signed', l1Vendor: 'SecureHealth Services', noaNo: 'NOA/MP/SRV/2026/161', noaDate: '25-07-2026', agreementNo: 'AGR/MP/2026/161', value: '₹65 L – ₹78 L', legalStatus: 'Cleared', financeStatus: 'Cleared', signedOn: '01-08-2026', remarks: 'Manpower deployment SLA included.' },
+    { id: 'CNT-2026-0161', tenderId: 'TND-2026-MP-0161', title: 'Hospital Security Services', state: 'Madhya Pradesh', division: 'Bhopal', category: 'Services', status: 'Awaiting BO approval', l1Vendor: 'SecureHealth Services', noaNo: 'NOA/MP/SRV/2026/161', noaDate: '25-07-2026', agreementNo: 'Draft AGR/161', value: '₹65 L – ₹78 L', legalStatus: 'Cleared', financeStatus: 'Under review', signedOn: '—', remarks: 'Manpower deployment SLA included. Awaiting Budget Officer PBG + approval.' },
     { id: 'CNT-2026-0126', tenderId: 'TND-2026-MP-0126', title: 'Telemedicine Platform', state: 'Madhya Pradesh', division: 'Gwalior', category: 'Services', status: 'Awaiting L1 lock', l1Vendor: '— Pending evaluation', noaNo: '—', noaDate: '—', agreementNo: '—', value: '₹85 L – ₹1.05 Cr', legalStatus: 'Not started', financeStatus: 'Not started', signedOn: '—', date: '28-08-2026', remarks: 'Depends on QCBS outcome.' },
     { id: 'CNT-2026-0085', tenderId: 'TND-2026-MP-0085', title: 'Ambulance Fleet Maintenance', state: 'Madhya Pradesh', division: 'Rewa', category: 'Others', status: 'NOA issued', l1Vendor: 'MediTrans Logistics', noaNo: 'NOA/MP/OTH/2026/085', noaDate: '28-08-2026', agreementNo: 'Draft AGR/085', value: '₹29 L – ₹34 L', legalStatus: 'Cleared', financeStatus: 'Under review', signedOn: '—', remarks: 'Uptime penalty clauses under finance review.' },
-    { id: 'CNT-2026-0133', tenderId: 'TND-2026-MP-0133', title: 'Waste Management Services', state: 'Madhya Pradesh', division: 'Indore', category: 'Others', status: 'Agreement signed', l1Vendor: 'GreenMed Waste', noaNo: 'NOA/MP/OTH/2026/133', noaDate: '10-08-2026', agreementNo: 'AGR/MP/2026/133', value: '₹38 L – ₹46 L', legalStatus: 'Cleared', financeStatus: 'Cleared', signedOn: '18-08-2026', remarks: 'PCB authorization verified.' }
+    { id: 'CNT-2026-0133', tenderId: 'TND-2026-MP-0133', title: 'Waste Management Services', state: 'Madhya Pradesh', division: 'Indore', category: 'Others', status: 'Awaiting BO approval', l1Vendor: 'GreenMed Waste', noaNo: 'NOA/MP/OTH/2026/133', noaDate: '10-08-2026', agreementNo: 'Draft AGR/133', value: '₹38 L – ₹46 L', legalStatus: 'Cleared', financeStatus: 'Under review', signedOn: '—', remarks: 'PCB authorization verified. Awaiting Budget Officer PBG + approval.' }
   ]
 };
 
@@ -1179,66 +1185,6 @@ const ALERTS_VENDOR = [
   { id: 2, type: 'approval', title: 'Bid Submitted Reminder', msg: 'TND-2026-MP-0055 closes in 3 days', date: '2026-09-05', impact: 'Miss deadline = rejection', action: 'Complete bid submission', unread: true },
   { id: 3, type: 'expiry', title: 'Document Expiry', msg: 'ISO 13485 certificate expires in 22 days', date: '2026-09-24', impact: 'Eligibility at risk', action: 'Upload renewed certificate', unread: true },
   { id: 4, type: 'approval', title: 'LOA Received', msg: 'TND-2026-MP-0038 - Letter of Award issued', date: '2026-08-29', impact: 'Submit PBG within 15 days', action: 'Acknowledge LOA', unread: true }
-];
-
-/** Official notices pushed from Government / Resource Manager to Vendor portal — shown as load-time modal */
-const GOV_NOTICES = [
-  {
-    id: 'GN-2026-041',
-    priority: 'critical',
-    category: 'Corrigendum',
-    title: 'Corrigendum — Essential Medicines Rate Contract',
-    msg: 'BOQ quantity and technical specs updated for Paracetamol 500mg under TND-2026-MP-0042. Vendors must revise sealed bids before the extended deadline.',
-    date: '2026-09-01',
-    time: '11:20 IST',
-    from: 'Procurement Cell, MP Health',
-    ref: 'TND-2026-MP-0042',
-    actionLabel: 'Open Tender Discovery',
-    actionPage: 'tenders',
-    unread: true
-  },
-  {
-    id: 'GN-2026-038',
-    priority: 'high',
-    category: 'Deadline',
-    title: 'Bid Closing Reminder — CT Scanner Procurement',
-    msg: 'TND-2026-MP-0055 closes on 05 Sep 2026, 17:00 IST. Incomplete technical or financial bids will be rejected without further notice.',
-    date: '2026-09-02',
-    time: '09:00 IST',
-    from: 'Tender Management Unit',
-    ref: 'TND-2026-MP-0055',
-    actionLabel: 'Go to Bid Submitted',
-    actionPage: 'bids',
-    unread: true
-  },
-  {
-    id: 'GN-2026-035',
-    priority: 'high',
-    category: 'Award',
-    title: 'Letter of Award Issued',
-    msg: 'LOA issued for Hospital Linen Supply (TND-2026-MP-0038). Acknowledge LOA and submit Performance Bank Guarantee within 15 calendar days.',
-    date: '2026-08-29',
-    time: '16:45 IST',
-    from: 'Contract Award Committee',
-    ref: 'LOA-2026-0038',
-    actionLabel: 'View Contracts',
-    actionPage: 'contracts',
-    unread: true
-  },
-  {
-    id: 'GN-2026-029',
-    priority: 'medium',
-    category: 'Compliance',
-    title: 'Certificate Renewal Advisory',
-    msg: 'ISO 13485 certificate for MediSupply India Pvt Ltd expires in 22 days. Upload renewed certificate under Registration / KYC to avoid eligibility blocks.',
-    date: '2026-08-28',
-    time: '10:15 IST',
-    from: 'Vendor Registry',
-    ref: 'KYC-CERT-13485',
-    actionLabel: 'Open Registration',
-    actionPage: 'registration',
-    unread: false
-  }
 ];
 
 const TENDERS = [
@@ -2116,6 +2062,424 @@ const PERF_METRICS = [
     logic: 'Lower blacklisting risk → more points'
   }
 ];
+
+/** Metric verification data (figures + records only — used by RM and Vendor). */
+const VENDOR_PERF_JUSTIFICATIONS = {
+  'VND-MP-000123': {
+    assessmentPeriod: '01-04-2026 — 31-08-2026',
+    metrics: {
+      testingLabs: {
+        calc: '96.4% × 0.96 = 92',
+        inputs: [
+          ['Batches tested', '48'],
+          ['Passed (1st test)', '46'],
+          ['Passed (retest)', '2'],
+          ['Rejected', '0'],
+          ['QC pass rate', '96.4%'],
+          ['NABL factor', '0.96']
+        ],
+        columns: ['Batch ID', 'Item', 'Result', 'Proof', 'Date'],
+        rows: [
+          ['BAT-2026-0412', 'Paracetamol 500mg', 'Pass', 'COA-NABL-4412', '12-05-2026'],
+          ['BAT-2026-0448', 'Amoxicillin 250mg', 'Pass', 'COA-NABL-4488', '28-05-2026'],
+          ['BAT-2026-0510', 'IV NS 500ml', 'Retest → Pass', 'COA-RT-0510', '14-06-2026'],
+          ['BAT-2026-0588', 'Metformin 500mg', 'Pass', 'COA-NABL-5588', '02-07-2026'],
+          ['BAT-2026-0621', 'Essential RC pack', 'Pass', 'COA-NABL-6621', '18-07-2026'],
+          ['BAT-2026-0690', 'IV Fluids combo', 'Retest → Pass', 'COA-RT-0690', '09-08-2026']
+        ]
+      },
+      timelyDelivery: {
+        calc: 'On-time 9/11 = 81.8% + lead-time credit → 88',
+        inputs: [
+          ['Consignments', '11'],
+          ['On / before due date', '9'],
+          ['Late (≤3 days)', '2'],
+          ['Avg lead time', '4.2 days'],
+          ['SLA lead time', '7 days'],
+          ['LD invoked', '₹0']
+        ],
+        columns: ['Consignment', 'PO', 'Due', 'Delivered', 'Variance'],
+        rows: [
+          ['DEL-2026-0456', 'PO-2026-0089', '28-08-2026', '28-08-2026', '0 d'],
+          ['DEL-2026-0457', 'PO-2025-0234', '15-06-2026', '12-06-2026', '-3 d'],
+          ['DEL-2026-0461', 'PO-2026-0042', '05-09-2026', '05-09-2026', '0 d'],
+          ['DEL-2026-0411', 'PO-2026-0031', '20-05-2026', '22-05-2026', '+2 d'],
+          ['DEL-2026-0422', 'PO-2026-0038', '10-06-2026', '10-06-2026', '0 d'],
+          ['DEL-2026-0435', 'PO-2026-0040', '02-07-2026', '05-07-2026', '+3 d']
+        ]
+      },
+      pricing: {
+        calc: 'RC median gap -3.8% → score 85',
+        inputs: [
+          ['SKUs priced', '14'],
+          ['Below RC median', '11'],
+          ['At / above median', '3'],
+          ['Avg vs RC median', '-3.8%'],
+          ['Price variation claims', '0'],
+          ['3-way match variance', '±0.8%']
+        ],
+        columns: ['SKU', 'Awarded rate', 'RC median', 'Gap', 'Tender'],
+        rows: [
+          ['Paracetamol 500mg', '₹18.40', '₹19.20', '-4.2%', 'TND-2026-MP-0042'],
+          ['Amoxicillin 250mg', '₹42.10', '₹43.00', '-2.1%', 'TND-2026-MP-0042'],
+          ['IV NS 500ml', '₹16.75', '₹17.50', '-4.3%', 'CNT-2025-0234'],
+          ['Metformin 500mg', '₹21.00', '₹21.80', '-3.7%', 'TND-2026-MP-0042']
+        ]
+      },
+      packaging: {
+        calc: 'Compliance 45/48 lots = 93.8% → 86',
+        inputs: [
+          ['Lots checked', '48'],
+          ['Fully compliant', '45'],
+          ['Minor observation', '3'],
+          ['Pack integrity reject', '0'],
+          ['Damage claims', '1 (<0.2% value)'],
+          ['Cold-chain logger OK', '100%']
+        ],
+        columns: ['Lot', 'Check', 'Result', 'Warehouse', 'Date'],
+        rows: [
+          ['LOT-PCM-612', 'Label + shelf-life', 'OK', 'CWH Bhopal', '12-05-2026'],
+          ['LOT-IV-228', 'Temp logger', 'OK', 'CWH Bhopal', '14-06-2026'],
+          ['LOT-MET-901', 'Carton integrity', 'Minor crush', 'CWH Indore', '02-07-2026'],
+          ['LOT-RC-440', 'BOQ pack match', 'OK', 'CWH Bhopal', '18-07-2026']
+        ]
+      },
+      communication: {
+        calc: '16/18 within SLA (88.9%) + SPOC credit → 90',
+        inputs: [
+          ['SLA threads', '18'],
+          ['Closed in L1 window', '16'],
+          ['Breached 24h SLA', '2'],
+          ['Avg first response', '6.5 hrs'],
+          ['L3 escalations', '0'],
+          ['Clarifications', '4']
+        ],
+        columns: ['Thread', 'Subject', 'First reply', 'SLA', 'Closed'],
+        rows: [
+          ['SLA-2026-014', 'GRN query CNT-0089', '4.2 hrs', 'Met', '01-09-2026'],
+          ['SLA-2026-011', 'Invoice match INV-0892', '6.0 hrs', 'Met', '01-09-2026'],
+          ['SLA-2026-008', 'PBG ack CNT-0234', '9.5 hrs', 'Met', '25-08-2026'],
+          ['CL-0892', 'BOQ amendment', '11 hrs', 'Met', '02-09-2026']
+        ]
+      },
+      blacklisting: {
+        calc: '100 − risk 2 = 98',
+        inputs: [
+          ['Active debarment', '0'],
+          ['Suspension flags', '0'],
+          ['Vigilance holds', '0'],
+          ['PBG status', 'Verified (SFMS)'],
+          ['Empanelment fee', 'Paid'],
+          ['Risk score', '2']
+        ],
+        columns: ['Check', 'Reference', 'Result', 'Date'],
+        rows: [
+          ['GE debarment list', 'GSTIN 23AABCM1234A1Z5', 'Clear', '02-09-2026'],
+          ['State suspension', 'VND-MP-000123', 'Clear', '02-09-2026'],
+          ['PBG SFMS', 'CNT-2025-0234', 'Verified', '25-08-2026'],
+          ['Empanelment', 'UTR SBIN928471036482', 'Paid', '01-08-2026']
+        ]
+      }
+    }
+  },
+  'VND-MP-000456': {
+    assessmentPeriod: '01-04-2026 — 31-08-2026',
+    metrics: {
+      testingLabs: {
+        calc: 'FAT/SAT 7/8 pass = 87.5% + warranty → 85',
+        inputs: [['Installs tested', '8'], ['FAT/SAT pass', '7'], ['Open punch-list', '2'], ['Warranty claims', '1 (closed)']],
+        columns: ['Site', 'Equipment', 'Test', 'Result', 'Date'],
+        rows: [
+          ['DH Indore', 'Patient monitor', 'SAT', 'Pass', '15-05-2025'],
+          ['DH Bhopal', 'Patient monitor', 'SAT', 'Pass', '20-06-2026'],
+          ['CHC Ujjain', 'Monitor kit', 'SAT', 'Punch-list open', '12-07-2026']
+        ]
+      },
+      timelyDelivery: {
+        calc: 'On-time 4/6 = 66.7% + notice credit → 78',
+        inputs: [['POs', '6'], ['On schedule', '4'], ['Delayed', '2'], ['LD applied', '₹0']],
+        columns: ['PO', 'Site', 'Due', 'Ready', 'Variance'],
+        rows: [
+          ['PO-2025-0142', 'Indore', '15-05-2025', '15-05-2025', '0 d'],
+          ['PO-2026-0102', 'Indore', '20-08-2026', '28-08-2026', '+8 d'],
+          ['PO-2026-0110', 'Bhopal', '10-07-2026', '10-07-2026', '0 d']
+        ]
+      },
+      pricing: {
+        calc: 'Landed cost -6% vs median → 92',
+        inputs: [['Line items', '9'], ['Below median', '8'], ['Avg gap', '-6%']],
+        columns: ['Item', 'Awarded', 'Median', 'Gap'],
+        rows: [
+          ['Monitor AMC', '₹18 L', '₹19.2 L', '-6.3%'],
+          ['Spare kit', '₹2.1 L', '₹2.2 L', '-4.5%']
+        ]
+      },
+      packaging: {
+        calc: 'Damage-free 5/6 + accessory fix → 84',
+        inputs: [['Consignments', '6'], ['Transit damage', '0'], ['Missing accessory', '1 (replaced 48h)']],
+        columns: ['Consignment', 'Check', 'Result', 'Date'],
+        rows: [
+          ['CRATE-8821', 'Shock indicator', 'OK', '12-05-2025'],
+          ['CRATE-9014', 'Accessory kit', 'Missing→replaced', '18-08-2026']
+        ]
+      },
+      communication: {
+        calc: '10/12 on-time = 83% − L2 penalty → 82',
+        inputs: [['Threads', '12'], ['Within SLA', '10'], ['L2 escalations', '2'], ['Avg reply', '11 hrs']],
+        columns: ['Thread', 'Topic', 'Reply', 'Level'],
+        rows: [
+          ['SLA-EQ-221', 'Install slot', '8 hrs', 'L1'],
+          ['SLA-EQ-230', 'Civil dependency', '30 hrs', 'L2']
+        ]
+      },
+      blacklisting: {
+        calc: '100 − residual risk 10 = 90',
+        inputs: [['Debarment', '0'], ['Closed caution (FY23)', '1'], ['DSC', 'Active']],
+        columns: ['Check', 'Result', 'Date'],
+        rows: [
+          ['Debarment screen', 'Clear', '02-09-2026'],
+          ['FY23 caution', 'Closed', '15-01-2024']
+        ]
+      }
+    }
+  },
+  'VND-MP-000789': {
+    assessmentPeriod: '01-04-2026 — 31-08-2026',
+    metrics: {
+      testingLabs: {
+        calc: 'Pass 27/32 = 84.4% − retest drag → 78',
+        inputs: [['Batches', '32'], ['Pass 1st', '27'], ['Retest clear', '2'], ['Rejected', '3']],
+        columns: ['Batch', 'Item', 'Result', 'Date'],
+        rows: [
+          ['BAT-PC-771', 'Paracetamol bulk', 'Pass', '10-05-2026'],
+          ['BAT-IV-303', 'IV Fluids', 'Rejected', '22-06-2026'],
+          ['BAT-IV-318', 'IV Fluids', 'Retest → Pass', '05-07-2026']
+        ]
+      },
+      timelyDelivery: {
+        calc: 'On-time 7/9 = 77.8% − LD drag → 72',
+        inputs: [['Consignments', '9'], ['On-time', '7'], ['Late', '2'], ['LD', '₹48,000']],
+        columns: ['Delivery', 'Due', 'Actual', 'Variance'],
+        rows: [
+          ['DEL-789-01', '10-05-2026', '10-05-2026', '0 d'],
+          ['DEL-789-04', '18-06-2026', '23-06-2026', '+5 d'],
+          ['DEL-789-07', '02-08-2026', '02-08-2026', '0 d']
+        ]
+      },
+      pricing: {
+        calc: 'Basket +1.2% on 4 SKUs, rest in band → 88',
+        inputs: [['SKUs', '12'], ['Above median', '4'], ['Avg gap', '+1.2%']],
+        columns: ['SKU', 'Rate', 'Median', 'Gap'],
+        rows: [
+          ['IV NS 500ml', '₹17.90', '₹17.50', '+2.3%'],
+          ['Metformin 500mg', '₹21.50', '₹21.80', '-1.4%']
+        ]
+      },
+      packaging: {
+        calc: 'Compliant 26/32 = 81% → 74',
+        inputs: [['Lots', '32'], ['Shortage claims', '2'], ['Logger missing', '1']],
+        columns: ['Lot', 'Issue', 'Action', 'Date'],
+        rows: [
+          ['LOT-789-12', 'Shortage 40 units', 'Free replacement', '11-06-2026'],
+          ['LOT-789-19', 'Cold logger missing', 'CAPA filed', '03-07-2026']
+        ]
+      },
+      communication: {
+        calc: '11/14 in SLA = 78.6% → 75',
+        inputs: [['Threads', '14'], ['Within 24h', '11'], ['Overdue', '3'], ['Avg reply', '18 hrs']],
+        columns: ['Thread', 'Reply', 'SLA'],
+        rows: [
+          ['SLA-789-03', '12 hrs', 'Met'],
+          ['SLA-789-09', '31 hrs', 'Breached']
+        ]
+      },
+      blacklisting: {
+        calc: '100 − license risk 18 = 82',
+        inputs: [['Debarment', '0'], ['License expiry', '15 days'], ['Empanelment', 'Paid']],
+        columns: ['Check', 'Result', 'Date'],
+        rows: [
+          ['Drug license DL-MH-2024-1102', 'Expires 17-09-2026', '02-09-2026'],
+          ['Debarment screen', 'Clear', '02-09-2026']
+        ]
+      }
+    }
+  },
+  'VND-MP-001012': {
+    assessmentPeriod: '01-04-2026 — 31-08-2026',
+    metrics: {
+      testingLabs: {
+        calc: 'Calibration pass 12/12 = 100% − minor doc → 95',
+        inputs: [['Kits', '12'], ['Calibration current', '12'], ['Critical defects', '0']],
+        columns: ['Kit', 'Certificate', 'Result', 'Date'],
+        rows: [
+          ['KIT-SUR-01', 'CAL-2026-881', 'Pass', '04-05-2026'],
+          ['KIT-SUR-07', 'CAL-2026-902', 'Pass', '19-06-2026']
+        ]
+      },
+      timelyDelivery: {
+        calc: 'Dispatch 7/7 on time; install slip 2 sites → 82',
+        inputs: [['POs', '7'], ['Ex-works on time', '7'], ['Install slips', '2']],
+        columns: ['PO', 'Dispatch', 'Install', 'Note'],
+        rows: [
+          ['PO-2026-0072', 'On time', 'On time', 'Gwalior'],
+          ['PO-2026-0079', 'On time', '+6 d', 'Buyer power readiness']
+        ]
+      },
+      pricing: {
+        calc: 'Unit price +4% vs L2 − warranty credit → 75',
+        inputs: [['Vs L2 median', '+4%'], ['Warranty', 'Extended included'], ['AMC lock', '3 yrs']],
+        columns: ['Item', 'Bid', 'L2 median', 'Gap'],
+        rows: [
+          ['Surgical kit A', '₹2.25 L', '₹2.16 L', '+4.2%']
+        ]
+      },
+      packaging: {
+        calc: 'Damage-free 7/7 = 100% − checklist miss → 90',
+        inputs: [['Consignments', '7'], ['Transit damage', '0'], ['QR tagged kits', '7']],
+        columns: ['Crate', 'Check', 'Result'],
+        rows: [
+          ['CR-BIO-14', 'Humidity indicator', 'OK'],
+          ['CR-BIO-19', 'Accessory QR', 'OK']
+        ]
+      },
+      communication: {
+        calc: '10/10 clarifications on time → 88',
+        inputs: [['Threads', '10'], ['Avg reply', '8 hrs'], ['L3', '0']],
+        columns: ['Ref', 'Topic', 'Reply'],
+        rows: [
+          ['CL-0894', 'Warranty period', '6 hrs'],
+          ['SLA-BIO-12', 'Install drawing', '9 hrs']
+        ]
+      },
+      blacklisting: {
+        calc: '100 − risk 2 = 98',
+        inputs: [['Debarment', '0'], ['PBG SFMS', 'Verified']],
+        columns: ['Check', 'Result', 'Date'],
+        rows: [
+          ['Registry', 'Clear', '02-09-2026'],
+          ['PBG', 'Verified', '20-08-2026']
+        ]
+      }
+    }
+  },
+  'VND-MP-001345': {
+    assessmentPeriod: '01-04-2026 — 31-08-2026',
+    metrics: {
+      testingLabs: {
+        calc: 'Pass 15/20 = 75% − reject penalty → 70',
+        inputs: [['Lots', '20'], ['Passed', '15'], ['Rejected', '4'], ['Pending CAPA', '2']],
+        columns: ['Lot', 'Test', 'Result', 'Date'],
+        rows: [
+          ['LOT-GLV-441', 'Pin-hole', 'Fail', '12-06-2026'],
+          ['LOT-GLV-458', 'Tensile', 'Fail', '28-06-2026'],
+          ['LOT-PPE-220', 'Pin-hole', 'Pass', '15-07-2026']
+        ]
+      },
+      timelyDelivery: {
+        calc: 'On-time 6/10 = 60% + short-ship drag → 65',
+        inputs: [['Consignments', '10'], ['On-time', '6'], ['Short-ship', '3'], ['LD notices', '2']],
+        columns: ['Delivery', 'Ordered', 'Received', 'Variance'],
+        rows: [
+          ['DEL-2026-0463', '50,000', '42,000', 'Short'],
+          ['DEL-CP-018', 'Due 01-07', '10-07', '+9 d']
+        ]
+      },
+      pricing: {
+        calc: 'L1 −8% vs median → 90',
+        inputs: [['Vs median', '-8%'], ['Hidden freight', '0']],
+        columns: ['Item', 'Bid', 'Median', 'Gap'],
+        rows: [
+          ['Disposable gloves', '₹2.70/pair', '₹2.93', '-7.8%']
+        ]
+      },
+      packaging: {
+        calc: 'Integrity fail 18% lots → 72',
+        inputs: [['Consignments', '10'], ['Crushed / mixed label', '2'], ['NCR', 'NCR-2026-441']],
+        columns: ['Consignment', 'Issue', 'Date'],
+        rows: [
+          ['CN-CP-77', 'Crushed cartons', '08-07-2026'],
+          ['CN-CP-81', 'Mixed batch labels', '21-07-2026']
+        ]
+      },
+      communication: {
+        calc: '11/16 in SLA = 68.8% → 68',
+        inputs: [['Threads', '16'], ['Breached', '5'], ['Avg reply', '26 hrs']],
+        columns: ['Thread', 'Reply', 'SLA'],
+        rows: [
+          ['SLA-CP-04', '28 hrs', 'Breached'],
+          ['SLA-CP-09', '40 hrs', 'Breached']
+        ]
+      },
+      blacklisting: {
+        calc: '100 − suspension risk 40 = 60',
+        inputs: [['Suspension', 'Active (28-08-2026)'], ['Open compliance review', 'Yes']],
+        columns: ['Check', 'Result', 'Date'],
+        rows: [
+          ['Restrictive notice', 'Suspended from new bids', '28-08-2026'],
+          ['CAPA on PPE lots', 'Open', '02-09-2026']
+        ]
+      }
+    }
+  },
+  'VND-MP-001678': {
+    assessmentPeriod: '01-04-2026 — 31-08-2026',
+    metrics: {
+      testingLabs: {
+        calc: 'UAT pass − 3 minor defects closed → 88',
+        inputs: [['UAT cases', '120'], ['Failed open', '0'], ['Critical security', '0']],
+        columns: ['Release', 'Check', 'Result', 'Date'],
+        rows: [
+          ['HMIS Phase-1', 'UAT', 'Pass (3 minor closed)', '01-09-2026'],
+          ['HMIS Phase-1', 'OWASP scan', 'No critical', '28-08-2026']
+        ]
+      },
+      timelyDelivery: {
+        calc: 'Milestones 3/4 on plan → 90',
+        inputs: [['Milestones', '4'], ['On plan', '3'], ['Slip', '1 (2 days)']],
+        columns: ['Milestone', 'Due', 'Delivered', 'Variance'],
+        rows: [
+          ['Code drop', '20-08-2026', '20-08-2026', '0 d'],
+          ['Runbook', '25-08-2026', '27-08-2026', '+2 d']
+        ]
+      },
+      pricing: {
+        calc: 'Invoices = SOW · no CR overrun → 80',
+        inputs: [['SOW envelope', '₹1.8 Cr'], ['Unapproved CR cost', '₹0']],
+        columns: ['Invoice', 'Milestone', 'Amount', 'Match'],
+        rows: [
+          ['INV-HMIS-01', 'Phase-1', '₹45 L', 'OK']
+        ]
+      },
+      packaging: {
+        calc: 'Release packs 3/3 · DR checklist late → 84',
+        inputs: [['Release bundles', '3'], ['Checksum OK', '3'], ['DR checklist late', '1']],
+        columns: ['Bundle', 'Artifact', 'Status'],
+        rows: [
+          ['REL-1.0', 'Deploy package', 'OK'],
+          ['REL-1.0', 'DR checklist', 'Late +2 d']
+        ]
+      },
+      communication: {
+        calc: 'P1 ack <4h · weekly updates on time → 85',
+        inputs: [['Tickets', '22'], ['Avg reply', '7 hrs'], ['P1 ack', '<4 hrs']],
+        columns: ['Ticket', 'Priority', 'Ack'],
+        rows: [
+          ['INC-441', 'P1', '2.5 hrs'],
+          ['INC-460', 'P2', '6 hrs']
+        ]
+      },
+      blacklisting: {
+        calc: '100 − risk 8 = 92',
+        inputs: [['Debarment', '0'], ['DSC', 'Active'], ['Security affidavit', 'On file']],
+        columns: ['Check', 'Result', 'Date'],
+        rows: [
+          ['Registry', 'Clear', '02-09-2026'],
+          ['Security affidavit', 'On file', '10-08-2026']
+        ]
+      }
+    }
+  }
+};
 
 const CHART_DATA = {
   spend: {

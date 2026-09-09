@@ -19,7 +19,7 @@ const AUTH_ROLE_OPTIONS = [
   'System Administrator'
 ];
 
-const AUTH_DEMO_ROLES = ['Resource Manager', 'Vendor / Bidder'];
+const AUTH_DEMO_ROLES = ['Resource Manager', 'Finance / Budget Officer', 'Vendor / Bidder'];
 
 const AUTH_USERS = [
   {
@@ -31,6 +31,16 @@ const AUTH_USERS = [
     password: 'Admin@2026',
     avatar: 'RS',
     title: 'Resource Manager'
+  },
+  {
+    id: 'gov-002',
+    role: 'gov',
+    name: 'Priya Mehta',
+    email: 'budget@mphp.gov.in',
+    phone: '9876543211',
+    password: 'Budget@2026',
+    avatar: 'PM',
+    title: 'Finance / Budget Officer'
   },
   {
     id: 'vnd-001',
@@ -53,7 +63,9 @@ let otpResendTimer = null;
 let otpResendSeconds = 0;
 
 function roleLabelToKey(label) {
-  return label === 'Resource Manager' ? 'gov' : 'vendor';
+  if (label === 'Vendor / Bidder') return 'vendor';
+  if (label === 'Resource Manager' || label === 'Finance / Budget Officer') return 'gov';
+  return 'vendor';
 }
 
 function isDemoSignupRole(label) {
@@ -461,7 +473,7 @@ function renderSignupView() {
   return `
     <div class="auth-intro">
       <h2>Create your account</h2>
-      <p>Choose your account role to register. Demo portal access is enabled for Resource Manager and Vendor / Bidder.</p>
+      <p>Choose your account role to register. Demo portal access is enabled for Resource Manager, Finance / Budget Officer, and Vendor / Bidder.</p>
     </div>
     <form id="authSignupForm" class="auth-form" novalidate>
       ${customSelectHTML('Account Role', 'signupRole', AUTH_ROLE_OPTIONS, 'Vendor / Bidder')}
@@ -731,7 +743,7 @@ function handleSignupSubmit() {
     return;
   }
   if (!isDemoSignupRole(roleLabel)) {
-    showAuthAlert(`${roleLabel} is listed for this prototype. Demo signup is currently available for Resource Manager and Vendor / Bidder only.`);
+    showAuthAlert(`${roleLabel} is listed for this prototype. Demo signup is currently available for Resource Manager, Finance / Budget Officer, and Vendor / Bidder only.`);
     return;
   }
   if (phone.length !== 10) {
