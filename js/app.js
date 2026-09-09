@@ -4125,12 +4125,27 @@ function tenderBadgeClass(status) {
   return 'muted';
 }
 
+function getPerfMetricBarValue(metric, points) {
+  const p = Math.max(0, Math.min(100, Number(points) || 0));
+  // Bar shows the named measure: high bar = high quality / high cost / high delay / high blacklisting risk.
+  if (metric.scoring === 'lowerBetter' || metric.scoring === 'inverse') return 100 - p;
+  return p;
+}
+
+function getPerfMetricBarBenchmark(metric, benchmark) {
+  const b = Math.max(0, Math.min(100, Number(benchmark) || 0));
+  if (metric.scoring === 'lowerBetter' || metric.scoring === 'inverse') return 100 - b;
+  return b;
+}
+
 function renderPerformanceBreakdown(vendor) {
   const BENCHMARK = 85;
   const metrics = PERF_METRICS.map(m => ({
     ...m,
     score: vendor[m.key],
-    delta: vendor[m.key] - BENCHMARK
+    delta: vendor[m.key] - BENCHMARK,
+    barValue: getPerfMetricBarValue(m, vendor[m.key]),
+    barBenchmark: getPerfMetricBarBenchmark(m, BENCHMARK)
   }));
   const aboveCount = metrics.filter(m => m.score >= BENCHMARK).length;
   const strongest = metrics.reduce((a, b) => (b.score > a.score ? b : a));
@@ -4159,17 +4174,17 @@ function renderPerformanceBreakdown(vendor) {
       <div class="score-compare-header">
         <div class="score-compare-title">
           <h3>Performance vs Benchmark</h3>
-          <p>Compare your weighted scores against the platform standard of ${BENCHMARK} points</p>
+          <p>Bar shows the measured level for each parameter. Points are what count toward your score (benchmark ${BENCHMARK}).</p>
         </div>
         <div class="score-compare-legend-bar" role="note" aria-label="Chart legend">
           <div class="legend-key">
             <span class="legend-key-icon legend-key-icon--score" aria-hidden="true"></span>
-            <span class="legend-key-text">Your score</span>
+            <span class="legend-key-text">Measured level</span>
           </div>
           <span class="legend-key-sep" aria-hidden="true"></span>
           <div class="legend-key">
             <span class="legend-key-icon legend-key-icon--benchmark" aria-hidden="true"></span>
-            <span class="legend-key-text">Benchmark <strong>${BENCHMARK}</strong></span>
+            <span class="legend-key-text">Benchmark</span>
           </div>
         </div>
       </div>
@@ -4201,8 +4216,8 @@ function renderPerformanceBreakdown(vendor) {
       <div class="score-compare-table">
         <div class="score-compare-thead">
           <span>Parameter</span>
-          <span>Score distribution (0–100)</span>
-          <span>Score</span>
+          <span>Measured level (0–100)</span>
+          <span>Points</span>
           <span>vs Benchmark</span>
         </div>
         <div class="score-compare-rows">
@@ -4215,17 +4230,16 @@ function renderPerformanceBreakdown(vendor) {
               <span class="score-row-icon"><i class="fa-solid ${m.icon}"></i></span>
               <div class="score-row-text">
                 <span class="score-row-name">${m.label}</span>
-                <span class="score-row-weight">${m.weight}% weight</span>
               </div>
             </div>
-            <div class="score-row-visual">
+            <div class="score-row-visual" title="Measured ${m.label}: ${m.barValue}">
               <div class="score-lane-track">
-                <div class="score-lane-benchmark" style="left:${BENCHMARK}%"></div>
-                <div class="score-lane-fill" style="width:${m.score}%"></div>
+                <div class="score-lane-benchmark" style="left:${m.barBenchmark}%"></div>
+                <div class="score-lane-fill" style="width:${m.barValue}%"></div>
               </div>
             </div>
-            <div class="score-row-score">${m.score}</div>
-            <div class="score-row-result" title="Score ${m.score} vs benchmark ${BENCHMARK}">
+            <div class="score-row-score" title="Points earned">${m.score}</div>
+            <div class="score-row-result" title="Points ${m.score} vs benchmark ${BENCHMARK}">
               <span class="score-delta ${deltaClass}">${deltaText}</span>
               <span class="score-delta-hint">${deltaHint}</span>
             </div>
@@ -19938,7 +19952,7 @@ function openChartTrendDetail(chartKey, seriesLabel, periodLabel, value) {
           <h4>Vendor ranking — ${periodLabel}</h4>
           <div class="data-table-wrap kpi-detail-table">
             <table class="data-table data-table--modal">
-              <thead><tr><th>S.No</th><th>Vendor</th><th>Category</th><th>Testing through Labs</th><th>Timely Delivery</th><th>Pricing</th><th>Overall</th><th>Status</th></tr></thead>
+              <thead><tr><th>S.No</th><th>Vendor</th><th>Category</th><th>Quality</th><th>Timely Delivery</th><th>Costing</th><th>Overall</th><th>Status</th></tr></thead>
               <tbody>
                 ${vendors.map((v, i) => `<tr onclick="openVendorDetail('${v.id}')">
                   <td>${i + 1}</td>

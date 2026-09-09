@@ -1580,12 +1580,12 @@ const CONTRACT_MGMT_META = {
 };
 
 const CONTRACT_PERFORMANCE_MONITORS = [
-  { id: 'qc', label: 'Quality Testing through Labs', weight: 20 },
-  { id: 'comm', label: 'Communication response', weight: 10 },
+  { id: 'qc', label: 'Quality', weight: 20 },
   { id: 'delivery', label: 'Timely Delivery', weight: 25 },
+  { id: 'price', label: 'Costing', weight: 10 },
   { id: 'pack', label: 'Packaging & supply', weight: 10 },
-  { id: 'price', label: 'Pricing', weight: 10 },
-  { id: 'blacklist', label: 'Blacklisting status', weight: 15 },
+  { id: 'comm', label: 'Communication Response', weight: 10 },
+  { id: 'blacklist', label: 'Blacklisting', weight: 15 },
   { id: 'market', label: 'Market information (Generic)', weight: 10 }
 ];
 
@@ -1993,12 +1993,60 @@ const SLA_THREADS = [
 ];
 
 const PERF_METRICS = [
-  { key: 'testingLabs', label: 'Testing through Labs', weight: 25, icon: 'fa-flask', color: '#003D5D' },
-  { key: 'communication', label: 'Communication response', weight: 15, icon: 'fa-comments', color: '#1565c0' },
-  { key: 'timelyDelivery', label: 'Timely Delivery', weight: 25, icon: 'fa-truck-fast', color: '#00897b' },
-  { key: 'packaging', label: 'Packaging & supply', weight: 10, icon: 'fa-box', color: '#6d4c41' },
-  { key: 'pricing', label: 'Pricing', weight: 10, icon: 'fa-indian-rupee-sign', color: '#f57c00' },
-  { key: 'blacklisting', label: 'Blacklisting status', weight: 15, icon: 'fa-ban', color: '#c62828' }
+  {
+    key: 'testingLabs',
+    label: 'Quality',
+    weight: 25,
+    icon: 'fa-award',
+    color: '#003D5D',
+    scoring: 'higherBetter',
+    logic: 'Higher quality → more points'
+  },
+  {
+    key: 'timelyDelivery',
+    label: 'Timely Delivery',
+    weight: 25,
+    icon: 'fa-truck-fast',
+    color: '#00897b',
+    scoring: 'lowerBetter',
+    logic: 'Faster delivery (less time) → more points'
+  },
+  {
+    key: 'pricing',
+    label: 'Costing',
+    weight: 10,
+    icon: 'fa-indian-rupee-sign',
+    color: '#f57c00',
+    scoring: 'inverse',
+    logic: 'Higher cost → fewer points'
+  },
+  {
+    key: 'packaging',
+    label: 'Packaging & supply',
+    weight: 10,
+    icon: 'fa-box',
+    color: '#6d4c41',
+    scoring: 'nearBenchmark',
+    logic: 'Closer to benchmark → more points'
+  },
+  {
+    key: 'communication',
+    label: 'Communication Response',
+    weight: 15,
+    icon: 'fa-comments',
+    color: '#1565c0',
+    scoring: 'lowerBetter',
+    logic: 'Faster response (less time) → more points'
+  },
+  {
+    key: 'blacklisting',
+    label: 'Blacklisting',
+    weight: 15,
+    icon: 'fa-ban',
+    color: '#c62828',
+    scoring: 'lowerBetter',
+    logic: 'Lower blacklisting risk → more points'
+  }
 ];
 
 const CHART_DATA = {
@@ -2076,12 +2124,12 @@ const ANALYTICS_FY_OPTIONS = [
 ];
 
 const SCORE_WEIGHTS = [
-  { label: 'Testing through Labs', weight: 25 },
-  { label: 'Communication response', weight: 15 },
+  { label: 'Quality', weight: 25 },
   { label: 'Timely Delivery', weight: 25 },
+  { label: 'Costing', weight: 10 },
   { label: 'Packaging & supply', weight: 10 },
-  { label: 'Pricing', weight: 10 },
-  { label: 'Blacklisting status', weight: 15 }
+  { label: 'Communication Response', weight: 15 },
+  { label: 'Blacklisting', weight: 15 }
 ];
 
 /** Item / drug types by category — used in analytics drill-downs */

@@ -6192,6 +6192,15 @@ body:has(#authPage:not([style*="display: none"])) {
   font-weight: 500;
 }
 
+.score-row-logic {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.68rem;
+  line-height: 1.35;
+  color: #64748b;
+  font-weight: 500;
+}
+
 .score-row-visual {
   min-width: 0;
   padding: 0 0.25rem;
