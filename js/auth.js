@@ -1,14 +1,11 @@
-/* MP Health Procurement — Authentication (Login / Signup / OTP) */
-
-const DEMO_EMAIL_OTP = '123456';
-const DEMO_PHONE_OTP = '789012';
+/* MP Health Procurement — Authentication (Login / Signup) */
 
 /** All roles shown in signup (prototype catalogue). Only demo roles can complete registration. */
 const AUTH_ROLE_OPTIONS = [
-  'Resource Manager',
-  'Vendor / Bidder',
+  'Admin',
+  'Vendor',
+  'Budget Officer',
   'Procurement Officer',
-  'Finance / Budget Officer',
   'Stores / Warehouse Manager',
   'Inspection / Quality Officer',
   'Tender Evaluation Committee',
@@ -19,39 +16,42 @@ const AUTH_ROLE_OPTIONS = [
   'System Administrator'
 ];
 
-const AUTH_DEMO_ROLES = ['Resource Manager', 'Finance / Budget Officer', 'Vendor / Bidder'];
+const AUTH_DEMO_ROLES = ['Admin', 'Vendor', 'Budget Officer'];
 
 const AUTH_USERS = [
   {
     id: 'gov-001',
     role: 'gov',
-    name: 'Dr. Rajesh Sharma',
+    username: 'Admin',
+    name: 'Admin',
     email: 'gov.admin@mphp.gov.in',
     phone: '9876543210',
-    password: 'Admin@2026',
-    avatar: 'RS',
-    title: 'Resource Manager'
+    password: 'Admin',
+    avatar: 'AD',
+    title: 'Admin'
   },
   {
     id: 'gov-002',
     role: 'gov',
-    name: 'Priya Mehta',
+    username: 'Budget',
+    name: 'Budget',
     email: 'budget@mphp.gov.in',
     phone: '9876543211',
-    password: 'Budget@2026',
-    avatar: 'PM',
-    title: 'Finance / Budget Officer'
+    password: 'Budget',
+    avatar: 'BO',
+    title: 'Budget Officer'
   },
   {
     id: 'vnd-001',
     role: 'vendor',
-    name: 'Amit Verma',
+    username: 'Vendor',
+    name: 'Vendor',
     organization: 'MediSupply India Pvt Ltd',
     email: 'vendor@medisupply.in',
     phone: '9123456780',
-    password: 'Vendor@2026',
-    avatar: 'MS',
-    title: 'Vendor / Bidder',
+    password: 'Vendor',
+    avatar: 'VN',
+    title: 'Vendor',
     vendorId: 'VND-MP-000123'
   }
 ];
@@ -63,8 +63,8 @@ let otpResendTimer = null;
 let otpResendSeconds = 0;
 
 function roleLabelToKey(label) {
-  if (label === 'Vendor / Bidder') return 'vendor';
-  if (label === 'Resource Manager' || label === 'Finance / Budget Officer') return 'gov';
+  if (label === 'Vendor' || label === 'Vendor / Bidder') return 'vendor';
+  if (label === 'Admin' || label === 'Resource Manager' || label === 'Budget Officer' || label === 'Finance / Budget Officer') return 'gov';
   return 'vendor';
 }
 
@@ -90,18 +90,14 @@ function getAllUsers() {
   return [...AUTH_USERS, ...getRegisteredUsers()];
 }
 
-function normalizePhone(value) {
-  return String(value || '').replace(/\D/g, '').slice(-10);
+function normalizeUsername(value) {
+  return String(value || '').trim().toLowerCase();
 }
 
-function findUserByIdentifier(identifier) {
-  const raw = identifier.trim().toLowerCase();
-  const phone = normalizePhone(identifier);
-  return getAllUsers().find(u =>
-    u.email.toLowerCase() === raw ||
-    u.phone === phone ||
-    normalizePhone(u.phone) === phone
-  );
+function findUserByUsername(username) {
+  const key = normalizeUsername(username);
+  if (!key) return null;
+  return getAllUsers().find(u => normalizeUsername(u.username) === key);
 }
 
 function getAuthSession() {
@@ -115,21 +111,35 @@ function clearAuthSession() {
   stopOtpTimer();
 }
 
-function maskEmail(email) {
-  const [user, domain] = email.split('@');
-  if (!domain) return email;
-  const visible = user.slice(0, 2);
-  return `${visible}${'•'.repeat(Math.max(user.length - 2, 2))}@${domain}`;
+function completePortalLogin(user) {
+  authSession = { ...user };
+  const role = user.role;
+  authPending = null;
+  stopOtpTimer();
+  if (typeof stopLandingHeroCarousel === 'function') stopLandingHeroCarousel();
+
+  const authPage = document.getElementById('authPage');
+  if (authPage) {
+    authPage.style.display = 'none';
+    authPage.classList.add('is-hidden');
+  }
+  if (typeof completeAuthLogin === 'function') {
+    completeAuthLogin(role, authSession);
+  }
+}
+
+function normalizePhone(value) {
+  return String(value || '').replace(/\D/g, '').slice(-10);
 }
 
 function maskPhone(phone) {
   const p = normalizePhone(phone);
-  if (p.length < 4) return phone;
-  return `+91 ${'•'.repeat(6)}${p.slice(-4)}`;
+  if (p.length < 4) return phone || '—';
+  return `+91 ******${p.slice(-4)}`;
 }
 
-let landingHeroTimer = null;
-let landingHeroIndex = 0;
+const DEMO_EMAIL_OTP = '123456';
+const DEMO_PHONE_OTP = '789012';
 
 function initAuth() {
   renderAuthUI();
@@ -437,15 +447,15 @@ function renderLoginView() {
   return `
     <div class="auth-intro">
       <h2>Welcome back</h2>
-      <p>Sign in with your registered email or mobile number. OTP verification follows.</p>
+      <p>Sign in with your username and password.</p>
     </div>
     <form id="authLoginForm" class="auth-form" novalidate>
-      ${customSelectHTML('Account Role', 'loginRole', AUTH_ROLE_OPTIONS, 'Vendor / Bidder')}
+      ${customSelectHTML('Account Role', 'loginRole', AUTH_ROLE_OPTIONS, 'Vendor')}
       <div class="form-group">
-        <label for="loginIdentifier">Email or Mobile Number</label>
+        <label for="loginUsername">Username</label>
         <div class="auth-field">
           <i class="fa-solid fa-user"></i>
-          <input type="text" id="loginIdentifier" name="identifier" placeholder="you@organization.gov.in" autocomplete="username" required>
+          <input type="text" id="loginUsername" name="username" placeholder="Enter username" autocomplete="username" required>
         </div>
       </div>
       <div class="form-group">
@@ -461,10 +471,20 @@ function renderLoginView() {
         <button type="button" class="auth-text-btn" id="btnForgotPassword">Forgot password?</button>
       </div>
       <button type="submit" class="btn-auth-submit">
-        Continue
+        Sign In
         <i class="fa-solid fa-arrow-right"></i>
       </button>
     </form>
+    <div class="auth-demo-creds">
+      <table class="auth-demo-table">
+        <thead><tr><th>Role</th><th>Username</th><th>Password</th></tr></thead>
+        <tbody>
+          <tr><td>Admin</td><td><code>Admin</code></td><td><code>Admin</code></td></tr>
+          <tr><td>Vendor</td><td><code>Vendor</code></td><td><code>Vendor</code></td></tr>
+          <tr><td>Budget Officer</td><td><code>Budget</code></td><td><code>Budget</code></td></tr>
+        </tbody>
+      </table>
+    </div>
     <p class="auth-switch-hint">New to the platform? <button type="button" class="auth-text-btn" data-tab="signup">Create an account</button></p>
   `;
 }
@@ -473,40 +493,15 @@ function renderSignupView() {
   return `
     <div class="auth-intro">
       <h2>Create your account</h2>
-      <p>Choose your account role to register. Demo portal access is enabled for Resource Manager, Finance / Budget Officer, and Vendor / Bidder.</p>
+      <p>Choose a role, then set a username and password. Demo access: Admin, Vendor, and Budget Officer.</p>
     </div>
     <form id="authSignupForm" class="auth-form" novalidate>
-      ${customSelectHTML('Account Role', 'signupRole', AUTH_ROLE_OPTIONS, 'Vendor / Bidder')}
-      <div class="auth-form-split">
-        <div class="form-group">
-          <label for="signupName">Full Name</label>
-          <div class="auth-field">
-            <i class="fa-solid fa-id-card"></i>
-            <input type="text" id="signupName" name="name" placeholder="Authorized signatory / officer name" required>
-          </div>
-        </div>
-        <div class="form-group">
-          <label for="signupOrg">Organization</label>
-          <div class="auth-field">
-            <i class="fa-solid fa-building"></i>
-            <input type="text" id="signupOrg" name="organization" placeholder="Registered company / firm name" required>
-          </div>
-        </div>
-      </div>
-      <div class="auth-form-split">
-        <div class="form-group">
-          <label for="signupEmail">Work Email</label>
-          <div class="auth-field">
-            <i class="fa-solid fa-envelope"></i>
-            <input type="email" id="signupEmail" name="email" placeholder="name@organization.in" autocomplete="email" required>
-          </div>
-        </div>
-        <div class="form-group">
-          <label for="signupPhone">Mobile Number</label>
-          <div class="auth-field auth-field--phone">
-            <span class="auth-prefix">+91</span>
-            <input type="tel" id="signupPhone" name="phone" placeholder="10-digit number" maxlength="10" inputmode="numeric" required>
-          </div>
+      ${customSelectHTML('Account Role', 'signupRole', AUTH_ROLE_OPTIONS, 'Vendor')}
+      <div class="form-group">
+        <label for="signupUsername">Username</label>
+        <div class="auth-field">
+          <i class="fa-solid fa-user"></i>
+          <input type="text" id="signupUsername" name="username" placeholder="Choose a username" autocomplete="username" required>
         </div>
       </div>
       <div class="auth-form-split">
@@ -514,7 +509,7 @@ function renderSignupView() {
           <label for="signupPassword">Password</label>
           <div class="auth-field">
             <i class="fa-solid fa-lock"></i>
-            <input type="password" id="signupPassword" name="password" placeholder="Minimum 8 characters" autocomplete="new-password" required>
+            <input type="password" id="signupPassword" name="password" placeholder="Enter password" autocomplete="new-password" required>
             <button type="button" class="auth-toggle-pw" data-target="signupPassword" aria-label="Show password"><i class="fa-solid fa-eye"></i></button>
           </div>
         </div>
@@ -541,7 +536,7 @@ function renderSignupView() {
 
 function renderOtpView() {
   const pending = authPending || {};
-  const roleLabel = pending.title || (pending.role === 'gov' ? 'Resource Manager' : 'Vendor / Bidder');
+  const roleLabel = pending.title || (pending.role === 'gov' ? 'Admin' : 'Vendor');
 
   return `
     <div class="auth-intro">
@@ -700,58 +695,59 @@ function hideAuthAlert() {
 
 function handleLoginSubmit() {
   hideAuthAlert();
-  const identifier = document.getElementById('loginIdentifier')?.value.trim();
+  const username = document.getElementById('loginUsername')?.value.trim();
   const password = document.getElementById('loginPassword')?.value;
+  const roleLabel = typeof getCustomSelectValue === 'function'
+    ? getCustomSelectValue('loginRole')
+    : 'Vendor';
 
-  if (!identifier || !password) {
-    showAuthAlert('Please enter your email or mobile number and password.');
+  if (!username || !password) {
+    showAuthAlert('Please enter your username and password.');
     return;
   }
 
-  const user = findUserByIdentifier(identifier);
+  const user = findUserByUsername(username);
   if (!user || user.password !== password) {
-    showAuthAlert('Invalid email, mobile number, or password. Please try again.');
+    showAuthAlert('Invalid username or password. Please try again.');
     return;
   }
 
-  authPending = { ...user, source: 'login', isNewSignup: false };
-  authView = 'otp';
-  updateAuthContent();
-  showAuthAlert(`Verification codes sent to ${maskEmail(user.email)} and ${maskPhone(user.phone)}.`, 'success');
+  if (roleLabel && user.title && roleLabel !== user.title) {
+    showAuthAlert(`This username belongs to <strong>${user.title}</strong>. Select that role and try again.`);
+    return;
+  }
+
+  completePortalLogin({ ...user, isNewSignup: false });
 }
 
 function handleSignupSubmit() {
   hideAuthAlert();
-  const name = document.getElementById('signupName')?.value.trim();
-  const organization = document.getElementById('signupOrg')?.value.trim();
-  const email = document.getElementById('signupEmail')?.value.trim().toLowerCase();
-  const phone = normalizePhone(document.getElementById('signupPhone')?.value);
+  const username = document.getElementById('signupUsername')?.value.trim();
   const password = document.getElementById('signupPassword')?.value;
   const confirm = document.getElementById('signupConfirm')?.value;
   const roleLabel = typeof getCustomSelectValue === 'function'
     ? getCustomSelectValue('signupRole')
-    : 'Vendor / Bidder';
-  const role = roleLabelToKey(roleLabel);
+    : 'Vendor';
   const terms = document.getElementById('signupTerms')?.checked;
 
-  if (!name || !organization || !email || !phone || !password || !confirm) {
-    showAuthAlert('Please complete all required fields.');
+  if (!username || !password || !confirm) {
+    showAuthAlert('Please enter username, password, and confirm password.');
     return;
   }
   if (!roleLabel || !AUTH_ROLE_OPTIONS.includes(roleLabel)) {
-    showAuthAlert('Please select an account role.');
+    showAuthAlert('Please select a valid account role.');
     return;
   }
   if (!isDemoSignupRole(roleLabel)) {
-    showAuthAlert(`${roleLabel} is listed for this prototype. Demo signup is currently available for Resource Manager, Finance / Budget Officer, and Vendor / Bidder only.`);
+    showAuthAlert(`${roleLabel} is listed for this prototype. Demo signup is currently available for Admin, Vendor, and Budget Officer only.`);
     return;
   }
-  if (phone.length !== 10) {
-    showAuthAlert('Please enter a valid 10-digit mobile number.');
+  if (username.length < 3) {
+    showAuthAlert('Username must be at least 3 characters.');
     return;
   }
-  if (password.length < 8) {
-    showAuthAlert('Password must be at least 8 characters long.');
+  if (password.length < 5) {
+    showAuthAlert('Password must be at least 5 characters long.');
     return;
   }
   if (password !== confirm) {
@@ -759,35 +755,50 @@ function handleSignupSubmit() {
     return;
   }
   if (!terms) {
-    showAuthAlert('Please accept the terms and procurement guidelines to continue.');
+    showAuthAlert('Please accept the terms to continue.');
     return;
   }
 
-  const existing = getAllUsers().find(u => u.email === email || normalizePhone(u.phone) === phone);
-  if (existing) {
-    showAuthAlert('An account with this email or mobile already exists. Please sign in instead.');
+  if (findUserByUsername(username)) {
+    showAuthAlert('This username is already taken. Please choose another or sign in.');
     return;
   }
 
-  const initials = name.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'US';
+  const role = roleLabelToKey(roleLabel);
+  const displayName = username;
+  const initials = username.slice(0, 2).toUpperCase();
   const newUser = {
     id: `usr-${Date.now()}`,
     role,
-    name,
-    organization,
-    email,
-    phone,
+    username,
+    name: displayName,
+    organization: role === 'vendor' ? `${username} Organization` : 'MP Health',
+    email: `${normalizeUsername(username)}@demo.mphp.gov.in`,
+    phone: '9000000000',
     password,
     avatar: initials,
     title: roleLabel,
     vendorId: role === 'vendor' ? `VND-MP-${String(Math.floor(Math.random() * 900000) + 100000)}` : undefined,
-    isNewAccount: true
+    isNewAccount: true,
+    isNewSignup: true
   };
 
-  authPending = { ...newUser, source: 'signup', isNewSignup: true };
-  authView = 'otp';
-  updateAuthContent();
-  showAuthAlert(`Verification codes sent to ${maskEmail(email)} and ${maskPhone(phone)}.`, 'success');
+  saveRegisteredUser({
+    id: newUser.id,
+    role: newUser.role,
+    username: newUser.username,
+    name: newUser.name,
+    organization: newUser.organization,
+    email: newUser.email,
+    phone: newUser.phone,
+    password: newUser.password,
+    avatar: newUser.avatar,
+    title: newUser.title,
+    vendorId: newUser.vendorId,
+    isNewAccount: true
+  });
+
+  completePortalLogin(newUser);
 }
 
 function getOtpValue(group) {
@@ -833,20 +844,7 @@ function handleOtpSubmit() {
     });
   }
 
-  authSession = { ...authPending };
-  const role = authPending.role;
-  authPending = null;
-  stopOtpTimer();
-  stopLandingHeroCarousel();
-
-  const authPage = document.getElementById('authPage');
-  if (authPage) {
-    authPage.style.display = 'none';
-    authPage.classList.add('is-hidden');
-  }
-  if (typeof completeAuthLogin === 'function') {
-    completeAuthLogin(role, authSession);
-  }
+  completePortalLogin(authPending);
 }
 
 function initOtpInputs() {

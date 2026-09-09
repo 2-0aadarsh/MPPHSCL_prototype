@@ -3129,9 +3129,11 @@ function isBudgetOfficer() {
   if (currentRole !== 'gov') return false;
   const title = String(authUser?.title || '');
   const email = String(authUser?.email || '');
+  const username = String(authUser?.username || '');
   return /Budget Officer/i.test(title)
     || /finance/i.test(title)
-    || /^budget@/i.test(email);
+    || /^budget@/i.test(email)
+    || /^budget$/i.test(username);
 }
 
 function isResourceManagerDesk() {
@@ -3662,7 +3664,7 @@ function renderSidebar() {
   nav.innerHTML = html;
 
   const brandSub = document.getElementById('sidebarBrandSub');
-  brandSub.textContent = authUser?.title || (currentRole === 'gov' ? 'Resource Manager' : 'Vendor Portal');
+  brandSub.textContent = authUser?.title || (currentRole === 'gov' ? 'Admin' : 'Vendor Portal');
 }
 
 function getTenderPageSubtitle() {
@@ -3749,8 +3751,8 @@ function renderTopbar() {
       : authUser.name;
     userAvatar.textContent = authUser.avatar || (authUser.role === 'gov' ? 'RM' : 'VS');
   } else if (currentRole === 'gov') {
-    userName.textContent = 'Resource Manager';
-    userAvatar.textContent = 'RM';
+    userName.textContent = 'Admin';
+    userAvatar.textContent = 'AD';
   } else {
     userName.textContent = 'VND-MP-000123';
     userAvatar.textContent = 'VS';
@@ -5206,6 +5208,8 @@ function needStatusBadge(status) {
     'High Confidence': 'success',
     'Medium Confidence': 'info',
     Approved: 'success',
+    'Awaiting for approval': 'info',
+    'Awaiting BO approval': 'info',
     'Not Approved': 'danger',
     'Under Review': 'warning',
     Partial: 'warning',
@@ -7983,7 +7987,7 @@ function renderLoaIssuanceStage(canEdit = true) {
       <div class="budget-pr-chip"><span>LOAs issued</span><strong>${issued} / ${rows.length}</strong></div>
       <div class="budget-pr-chip"><span>Source</span><strong>Bid Evaluation L1</strong></div>
       <div class="budget-pr-chip"><span>Desk</span><strong>Resource Manager</strong></div>
-      <div class="budget-pr-chip"><span>Next</span><strong>Create Contract &amp; PBG</strong></div>
+      <div class="budget-pr-chip"><span>Next</span><strong>Create Contract</strong></div>
     </div>
     <section class="budget-section" id="loaIssuanceTable">
       <div class="data-table-wrap need-table">
@@ -8204,7 +8208,7 @@ function submitIssueLoaForm() {
 function getContractPbgRecord(contractId, tenderId) {
   const saved = govContractState.pbgRecords?.[contractId];
   if (saved) return saved;
-  // Seed award PBG is display-only — Stage 9 Record PBG (BO) is the real gate
+  // Seed award PBG is display-only — Stage 9 Approve PBG (BO) is the real gate
   const award = (typeof AWARD_STAGE_DATA !== 'undefined' ? AWARD_STAGE_DATA.awards : [])
     .find(a => a.contractId === contractId || a.tenderId === tenderId);
   if (!award) return null;
@@ -8222,7 +8226,23 @@ function isPbgRecordedForContract(r) {
   return !!(rec && (rec.status === 'Received' || rec.status === 'Recorded'));
 }
 
-/* ========== CMVPMS Stage 9 — Create Contract & PBG ========== */
+/* ========== CMVPMS Stage 9 — Create Contract ========== */
+function getStage9TableStatusLabel(r) {
+  const decided = govContractState.approvals[r.id]?.decision;
+  if (decided === 'Approved' || r.status === 'Agreement signed') return 'Approved';
+  if (decided === 'Rejected' || r.status === 'Not approved') return 'Rejected';
+  if (r.status === 'Awaiting L1 lock' || String(r.l1Vendor || '').includes('Pending')) return 'Awaiting for approval';
+  return 'Awaiting for approval';
+}
+
+function getStage9TablePbgLabel(r) {
+  const decided = govContractState.approvals[r.id]?.decision;
+  if (decided === 'Approved' || r.status === 'Agreement signed') {
+    return isPbgRecordedForContract(r) ? 'Received' : 'Awaiting for approval';
+  }
+  return 'Awaiting for approval';
+}
+
 function renderCreateContractPbgStage(canEdit = true) {
   const data = typeof CONTRACT_APPROVAL_DATA !== 'undefined' ? CONTRACT_APPROVAL_DATA : null;
   if (!data) return `<div class="need-api-empty"><p>Contract data could not be loaded.</p></div>`;
@@ -8233,36 +8253,36 @@ function renderCreateContractPbgStage(canEdit = true) {
   const categoryOptions = getGovStageCategoryOptions(data.contracts || []);
   const pbgDone = rows.filter(r => isPbgRecordedForContract(r)).length;
   const rmNote = isResourceManagerDesk()
-    ? 'Use <strong>Create contract form</strong> to draft from LOA. PBG recording is reserved for Finance / Budget Officer.'
+    ? 'Use <strong>Create contract form</strong> to draft from LOA. PBG approval is reserved for Finance / Budget Officer.'
     : isBudgetOfficer()
-      ? 'Use <strong>Record PBG</strong> only. Create contract is Resource Manager\'s action.'
+      ? 'Use <strong>Approve PBG</strong> only. Create contract is Resource Manager\'s action.'
       : 'Role-restricted desk.';
 
   return `<div class="tender-prep-stage">
     <div class="indent-mode-banner">
       <div>
-        <strong>Create Contract &amp; PBG</strong>
+        <strong>Create Contract</strong>
         <p>${rmNote}</p>
       </div>
       <span class="badge badge-info"><i class="fa-solid fa-calendar-days"></i> ${periodLabel}</span>
     </div>
     <div class="budget-pr-summary">
       <div class="budget-pr-chip"><span>Contracts</span><strong>${rows.length}</strong></div>
-      <div class="budget-pr-chip"><span>PBG recorded</span><strong>${pbgDone}</strong></div>
+      <div class="budget-pr-chip"><span>PBG approved</span><strong>${pbgDone}</strong></div>
       <div class="budget-pr-chip"><span>Create contract</span><strong>Resource Manager</strong></div>
-      <div class="budget-pr-chip"><span>Record PBG</span><strong>Budget Officer only</strong></div>
+      <div class="budget-pr-chip"><span>Approve PBG</span><strong>Budget Officer only</strong></div>
     </div>
     <section class="budget-section" id="contractPbgTable">
       <div class="data-table-wrap need-table">
         ${renderGovStageListHeader({
-          title: 'Contract &amp; PBG register',
+          title: 'Contract register',
           stageKey: 'contract',
           filterState: govContractState,
           selectId: 'contractPbgCategory',
           categoryOptions,
           lead: isBudgetOfficer()
-            ? 'Open a row or use <strong>Record PBG</strong> in the header. You record PBG here — contract Approve is Stage 10.'
-            : 'RM creates contracts here. PBG is recorded by Finance / Budget Officer (not by RM).'
+            ? 'Open a row or use <strong>Approve PBG</strong> in the header. Status / PBG show <strong>Awaiting for approval</strong> until Stage 10.'
+            : 'RM creates contracts here. Status and PBG show <strong>Awaiting for approval</strong> until Budget Officer completes Stage 9–10.'
         })}
         <div class="data-table-scroll">
         <table class="data-table consol-detail-table tender-prep-table">
@@ -8280,20 +8300,19 @@ function renderCreateContractPbgStage(canEdit = true) {
           </thead>
           <tbody>
             ${paged.items.length ? paged.items.map(r => {
-              const pbg = getContractPbgRecord(r.id, r.tenderId);
-              const pbgOk = isPbgRecordedForContract(r);
-              const pbgLabel = pbgOk ? 'Received' : (pbg?.status || 'Pending');
+              const statusLabel = getStage9TableStatusLabel(r);
+              const pbgLabel = getStage9TablePbgLabel(r);
               const title = r.title && r.title !== 'undefined' ? r.title : '—';
               const tenderId = r.tenderId && r.tenderId !== 'undefined' ? r.tenderId : '—';
               const vendor = r.l1Vendor && r.l1Vendor !== 'undefined' ? r.l1Vendor : '—';
               const actionLabel = isBudgetOfficer()
-                ? (pbgOk ? 'View PBG' : 'Record PBG')
+                ? (isPbgRecordedForContract(r) ? 'View PBG' : 'Approve PBG')
                 : 'View';
               return `<tr class="tender-prep-row" onclick="openContractPbgDetail('${r.id}')">
                 <td><strong>${r.id}</strong></td>
                 <td>${escapeHtmlLite(title)}<br><span class="cell-sub">${escapeHtmlLite(tenderId)}</span></td>
                 <td>${escapeHtmlLite(vendor)}</td>
-                <td><span class="badge badge-${needStatusBadge(r.status)}">${r.status}</span></td>
+                <td><span class="badge badge-${needStatusBadge(statusLabel)}">${escapeHtmlLite(statusLabel)}</span></td>
                 <td><span class="badge badge-${needStatusBadge(pbgLabel)}">${escapeHtmlLite(pbgLabel)}</span></td>
                 <td class="cell-nowrap">${r.value && r.value !== 'undefined' ? r.value : '—'}</td>
                 <td class="cell-date">${r.date || '—'}</td>
@@ -8309,6 +8328,44 @@ function renderCreateContractPbgStage(canEdit = true) {
   </div>`;
 }
 
+function getPbgBidderDetails(contract) {
+  const name = contract?.l1Vendor || contract?.vendor || '';
+  const tenderId = contract?.tenderId || '';
+  const profiles = typeof VENDOR_MGMT_PROFILES !== 'undefined' ? VENDOR_MGMT_PROFILES : [];
+  const profile = profiles.find(v =>
+    v.name === name
+    || String(v.name || '').includes(String(name).split(' ')[0] || '___')
+    || (name && String(v.name).toLowerCase().includes(String(name).toLowerCase().slice(0, 12)))
+  ) || null;
+  const ev = (typeof BID_EVALUATION_DATA !== 'undefined' ? (BID_EVALUATION_DATA.evaluations || []) : [])
+    .find(e => e.tenderId === tenderId || e.l1Vendor === name) || null;
+  const bid = (ev?.bidders || []).find(b => b.name === name || b.rank === 'L1' || b.rank === 'H1') || null;
+  const award = (typeof AWARD_STAGE_DATA !== 'undefined' ? (AWARD_STAGE_DATA.awards || []) : [])
+    .find(a => a.contractId === contract?.id || a.tenderId === tenderId) || null;
+  const vendorCode = profile?.id || profile?.nicVendorCode || '—';
+  return {
+    name: name || '—',
+    vendorId: vendorCode,
+    nicCode: profile?.nicVendorCode || '—',
+    type: profile?.type || 'Supplier / Bidder',
+    category: profile?.category || contract?.category || '—',
+    kyc: profile?.kyc || '—',
+    nicStatus: profile?.nicStatus || '—',
+    dsc: profile?.dsc || '—',
+    eligibility: profile?.eligibility || '—',
+    score: profile?.score != null ? String(profile.score) : '—',
+    dvdmsSync: profile?.dvdmsSync || '—',
+    rank: bid?.rank || (ev?.method === 'QCBS' ? 'H1' : 'L1'),
+    quote: bid?.quote || contract?.value || '—',
+    tech: bid?.tech || '—',
+    tenderId: tenderId || '—',
+    division: contract?.division || profile?.division || '—',
+    loaNo: award?.loaNo || contract?.noaNo || '—',
+    pbgSubmittedBy: 'Bidder (vendor portal)',
+    contactHint: profile?.marketIntel || 'PBG submitted by L1 / H1 bidder after LOA'
+  };
+}
+
 function openContractPbgDetail(contractId) {
   const r = (typeof CONTRACT_APPROVAL_DATA !== 'undefined' ? CONTRACT_APPROVAL_DATA.contracts : [])
     .find(c => c.id === contractId);
@@ -8316,29 +8373,51 @@ function openContractPbgDetail(contractId) {
   const pbg = getContractPbgRecord(r.id, r.tenderId);
   const pbgOk = isPbgRecordedForContract(r);
   const decision = govContractState.approvals[r.id]?.decision || 'Pending review';
+  const bidder = getPbgBidderDetails(r);
 
   openModal(`${r.id} — Contract & PBG (Stage 9)`, `
     <div class="indent-modal-form kpi-detail">
       <p class="consol-detail-lead" style="margin-top:0">
-        <strong>Stage 9</strong> = create contract (RM) + <strong>Record PBG</strong> (Budget Officer).
-        PBG is not “approved” here — after PBG is recorded, go to <strong>Stage 10</strong> to Approve the contract.
+        <strong>Stage 9</strong> = create contract (RM) + <strong>Approve PBG</strong> (Budget Officer).
+        PBG is submitted by the <strong>bidder</strong>; Budget Officer verifies and approves it here, then goes to
+        <strong>Stage 10</strong> to Approve the contract.
       </p>
       <div class="consol-detail-stats" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:1rem">
         <div class="consol-detail-stat"><span>Contract</span><strong>${escapeHtmlLite(r.id)}</strong></div>
-        <div class="consol-detail-stat"><span>L1 bidder</span><strong>${escapeHtmlLite(r.l1Vendor || '—')}</strong></div>
-        <div class="consol-detail-stat"><span>PBG</span><strong><span class="badge badge-${needStatusBadge(pbgOk ? 'Received' : 'Pending')}">${pbgOk ? 'Received' : 'Pending'}</span></strong></div>
+        <div class="consol-detail-stat"><span>L1 bidder</span><strong>${escapeHtmlLite(bidder.name)}</strong></div>
+        <div class="consol-detail-stat"><span>PBG</span><strong><span class="badge badge-${needStatusBadge(pbgOk ? 'Received' : 'Pending')}">${pbgOk ? 'Approved' : 'Awaiting for approval'}</span></strong></div>
         <div class="consol-detail-stat"><span>Stage 10 decision</span><strong>${escapeHtmlLite(decision)}</strong></div>
       </div>
+
+      <h4 class="budget-subhead">Bidder details (PBG submitted by bidder)</h4>
+      <div class="consol-detail-table-wrap" style="margin-bottom:1rem">
+        <table class="data-table consol-detail-table">
+          <tbody>
+            <tr><td>Bidder / vendor name</td><td><strong>${escapeHtmlLite(bidder.name)}</strong></td></tr>
+            <tr><td>Vendor ID / NIC code</td><td>${escapeHtmlLite(bidder.vendorId)} · ${escapeHtmlLite(bidder.nicCode)}</td></tr>
+            <tr><td>Type / category</td><td>${escapeHtmlLite(bidder.type)} · ${escapeHtmlLite(bidder.category)}</td></tr>
+            <tr><td>Bid rank / quote</td><td>${escapeHtmlLite(bidder.rank)} · ${escapeHtmlLite(bidder.quote)}</td></tr>
+            <tr><td>Technical status</td><td>${escapeHtmlLite(bidder.tech)}</td></tr>
+            <tr><td>KYC / NIC / DSC</td><td>${escapeHtmlLite(bidder.kyc)} · ${escapeHtmlLite(bidder.nicStatus)} · ${escapeHtmlLite(bidder.dsc)}</td></tr>
+            <tr><td>Eligibility / score</td><td>${escapeHtmlLite(bidder.eligibility)} · ${escapeHtmlLite(bidder.score)}</td></tr>
+            <tr><td>DVDMS sync</td><td>${escapeHtmlLite(bidder.dvdmsSync)}</td></tr>
+            <tr><td>Linked LOA / tender</td><td>${escapeHtmlLite(bidder.loaNo)} · ${escapeHtmlLite(bidder.tenderId)}</td></tr>
+            <tr><td>PBG source</td><td>${escapeHtmlLite(bidder.pbgSubmittedBy)} — ${escapeHtmlLite(bidder.contactHint)}</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4 class="budget-subhead">Contract &amp; PBG summary</h4>
       <div class="consol-detail-table-wrap" style="margin-bottom:1rem">
         <table class="data-table consol-detail-table">
           <tbody>
             <tr><td>Title</td><td><strong>${escapeHtmlLite(r.title || '—')}</strong></td></tr>
             <tr><td>Tender</td><td>${escapeHtmlLite(r.tenderId || '—')}</td></tr>
             <tr><td>Value</td><td>${escapeHtmlLite(r.value || '—')}</td></tr>
-            <tr><td>Contract status</td><td><span class="badge badge-${needStatusBadge(r.status)}">${escapeHtmlLite(r.status)}</span></td></tr>
+            <tr><td>Contract status</td><td><span class="badge badge-${needStatusBadge(getStage9TableStatusLabel(r))}">${escapeHtmlLite(getStage9TableStatusLabel(r))}</span></td></tr>
             <tr><td>PBG amount</td><td>${escapeHtmlLite(pbg?.amount || '—')}</td></tr>
             <tr><td>PBG reference</td><td>${escapeHtmlLite(pbg?.ref || '—')}</td></tr>
-            <tr><td>Recorded by</td><td>${escapeHtmlLite(pbg?.recordedBy || '—')}</td></tr>
+            <tr><td>Approved / recorded by</td><td>${escapeHtmlLite(pbgOk ? (pbg?.recordedBy || 'Budget Officer') : '—')}</td></tr>
             <tr><td>Received on</td><td>${escapeHtmlLite(pbg?.receivedOn || '—')}</td></tr>
           </tbody>
         </table>
@@ -8351,28 +8430,63 @@ function openContractPbgDetail(contractId) {
                  <i class="fa-solid fa-stamp"></i> Go to Stage 10 — Approve contract
                </button>`
             : `<button type="button" class="btn btn-primary" onclick="closeModal();openRecordPbgForm('${r.id}')">
-                 <i class="fa-solid fa-building-columns"></i> Record PBG
+                 <i class="fa-solid fa-building-columns"></i> Approve PBG
                </button>`)
           : `<span class="download-confirm-hint" style="margin:0">
-               You are Resource Manager — you cannot record PBG.
+               You are Resource Manager — you cannot Approve PBG.
                Log in as <strong>Finance / Budget Officer</strong>
-               (<code>budget@mphp.gov.in</code> / <code>Budget@2026</code>),
-               then use header <strong>Record PBG</strong> or open this row again.
+               (<code>Budget</code> / <code>Budget</code>),
+               then use header <strong>Approve PBG</strong> or open this row again.
              </span>`}
       </div>
     </div>
-  `, { wide: true });
+  `, { wide: true, large: true });
+}
+
+function fillApprovePbgBidderPanel() {
+  const label = typeof getCustomSelectValue === 'function' ? getCustomSelectValue('recordPbgSource') : '';
+  const panel = document.getElementById('approvePbgBidderPanel');
+  if (!panel) return;
+  if (!label || label === 'Select contract…') {
+    panel.innerHTML = '<p class="download-confirm-hint" style="margin:0">Select a contract to see the bidder who submitted this PBG.</p>';
+    return;
+  }
+  const id = (label.split(' — ')[0] || '').trim();
+  const contract = (typeof CONTRACT_APPROVAL_DATA !== 'undefined' ? CONTRACT_APPROVAL_DATA.contracts : []).find(c => c.id === id);
+  if (!contract) {
+    panel.innerHTML = '<p class="download-confirm-hint" style="margin:0">Contract not found.</p>';
+    return;
+  }
+  const b = getPbgBidderDetails(contract);
+  const award = (typeof AWARD_STAGE_DATA !== 'undefined' ? AWARD_STAGE_DATA.awards : [])
+    .find(a => a.contractId === id || a.tenderId === contract.tenderId);
+  const amountEl = document.getElementById('recordPbgAmount');
+  const refEl = document.getElementById('recordPbgRef');
+  if (amountEl && !amountEl.value && award?.pbgAmount) amountEl.value = award.pbgAmount;
+  if (refEl && !refEl.value && award?.pbgRef && award.pbgRef !== '—') refEl.value = award.pbgRef;
+  panel.innerHTML = `
+    <div class="consol-detail-table-wrap">
+      <table class="data-table consol-detail-table">
+        <tbody>
+          <tr><td>Bidder</td><td><strong>${escapeHtmlLite(b.name)}</strong></td></tr>
+          <tr><td>Vendor ID / NIC</td><td>${escapeHtmlLite(b.vendorId)} · ${escapeHtmlLite(b.nicCode)}</td></tr>
+          <tr><td>Rank / quote</td><td>${escapeHtmlLite(b.rank)} · ${escapeHtmlLite(b.quote)}</td></tr>
+          <tr><td>KYC / eligibility</td><td>${escapeHtmlLite(b.kyc)} · ${escapeHtmlLite(b.eligibility)}</td></tr>
+          <tr><td>PBG submitted by</td><td>Bidder via vendor portal (BO verifies &amp; approves)</td></tr>
+        </tbody>
+      </table>
+    </div>`;
 }
 
 function openRecordPbgForm(preselectId) {
   if (!isBudgetOfficer()) {
-    showWfAlert('Only Finance / Budget Officer can record PBG issuance.');
+    showWfAlert('Only Finance / Budget Officer can Approve PBG.');
     return;
   }
   const rows = (typeof CONTRACT_APPROVAL_DATA !== 'undefined' ? CONTRACT_APPROVAL_DATA.contracts : [])
     .filter(c => c.l1Vendor && !String(c.l1Vendor).includes('Pending'));
   if (!rows.length) {
-    showWfAlert('No contracts available to record PBG against.');
+    showWfAlert('No contracts available to Approve PBG against.');
     return;
   }
   const labels = rows.map(r => `${r.id} — ${r.title} (${r.l1Vendor})`);
@@ -8380,11 +8494,20 @@ function openRecordPbgForm(preselectId) {
   const selected = pre ? `${pre.id} — ${pre.title} (${pre.l1Vendor})` : 'Select contract…';
   const sourceSelect = customSelectHTML('Contract', 'recordPbgSource', labels, selected, true)
     .replace('class="form-group"', 'class="form-group full"');
-  openModal('Record PBG (Budget Officer)', `
+  openModal('Approve PBG (Budget Officer)', `
     <div class="indent-modal-form kpi-detail">
-      <p class="consol-detail-lead" style="margin-top:0">Finance / Budget Officer only. PBG must be recorded before Contract Approval (Stage 10).</p>
+      <p class="consol-detail-lead" style="margin-top:0">
+        Finance / Budget Officer only. PBG is filled by the <strong>bidder</strong> — verify details and
+        <strong>Approve PBG</strong> before Contract Approval (Stage 10).
+      </p>
       <div class="form-grid wf-form-grid">
         ${sourceSelect}
+      </div>
+      <h4 class="budget-subhead">Bidder who submitted PBG</h4>
+      <div id="approvePbgBidderPanel" style="margin-bottom:1rem">
+        <p class="download-confirm-hint" style="margin:0">Select a contract to see bidder details.</p>
+      </div>
+      <div class="form-grid wf-form-grid">
         <div class="form-group"><label>PBG amount</label><input id="recordPbgAmount" type="text" placeholder="₹ …"></div>
         <div class="form-group"><label>PBG reference</label><input id="recordPbgRef" type="text" placeholder="PBG/BANK/…"></div>
         <div class="form-group"><label>Issuing bank</label><input id="recordPbgBank" type="text" placeholder="Bank name"></div>
@@ -8393,16 +8516,19 @@ function openRecordPbgForm(preselectId) {
       </div>
       <div class="modal-inline-actions" style="margin-top:1rem">
         <button type="button" class="btn btn-outline" onclick="closeModal()"><i class="fa-solid fa-xmark"></i> Cancel</button>
-        <button type="button" class="btn btn-primary" onclick="submitRecordPbgForm()"><i class="fa-solid fa-building-columns"></i> Record PBG</button>
+        <button type="button" class="btn btn-primary" onclick="submitRecordPbgForm()"><i class="fa-solid fa-building-columns"></i> Approve PBG</button>
       </div>
     </div>
-  `, { wide: true });
+  `, { wide: true, large: true });
   if (typeof initCustomSelects === 'function') initCustomSelects();
+  document.querySelector('.custom-select[data-select-id="recordPbgSource"]')
+    ?.addEventListener('change', fillApprovePbgBidderPanel);
+  fillApprovePbgBidderPanel();
 }
 
 function submitRecordPbgForm() {
   if (!isBudgetOfficer()) {
-    showWfAlert('Only Finance / Budget Officer can record PBG issuance.');
+    showWfAlert('Only Finance / Budget Officer can Approve PBG.');
     return;
   }
   const label = typeof getCustomSelectValue === 'function' ? getCustomSelectValue('recordPbgSource') : '';
@@ -8427,7 +8553,9 @@ function submitRecordPbgForm() {
     receivedOn,
     remarks,
     recordedBy: authUser?.name || 'Finance / Budget Officer',
-    recordedOn: today
+    recordedOn: today,
+    bidderName: contract.l1Vendor || '—',
+    bidderId: getPbgBidderDetails(contract).vendorId
   };
   const award = (typeof AWARD_STAGE_DATA !== 'undefined' ? AWARD_STAGE_DATA.awards : [])
     .find(a => a.contractId === id || a.tenderId === contract.tenderId);
@@ -8440,7 +8568,7 @@ function submitRecordPbgForm() {
   try { persistGovLifecycle?.(); } catch (_) { /* optional */ }
   closeModal();
   refreshWorkflowUI();
-  showWfAlert(`PBG recorded for ${id} by Budget Officer.`, 'success');
+  showWfAlert(`PBG approved for ${id} · bidder ${contract.l1Vendor}.`, 'success');
 }
 
 /* ========== CMVPMS Stage 12 — Quality Control (Resource Manager) ========== */
@@ -8680,7 +8808,7 @@ function openNextPendingContractApproval() {
     return;
   }
   if (!isPbgRecordedForContract(pending)) {
-    showWfAlert(`PBG not recorded for ${pending.id}. Opening Stage 9 Record PBG first.`);
+    showWfAlert(`PBG not approved for ${pending.id}. Opening Stage 9 Approve PBG first.`);
     selectWorkflowStep(9);
     setTimeout(() => openRecordPbgForm(pending.id), 120);
     return;
@@ -8740,7 +8868,7 @@ function openContractApprovalDetail(contractId) {
         </button>`;
   const pbgLabel = pbgOk
     ? `Received · ${pbgRec?.ref || '—'} (${pbgRec?.receivedOn || '—'})`
-    : `${pbgRec?.status || 'Pending'} — Budget Officer must Record PBG on Stage 9`;
+    : `${pbgRec?.status || 'Pending'} — Budget Officer must Approve PBG on Stage 9`;
 
   openModal(`${r.id} — Timestamped approval gate`, `
     <div class="consol-detail-modal ca-form-modal">
@@ -8766,7 +8894,7 @@ function openContractApprovalDetail(contractId) {
         <i class="fa-solid fa-scale-balanced"></i>
         <div>
           <strong>Budget Officer approval — blocked until PBG is recorded on Stage 9</strong>
-          <p>Creating a contract (RM) does <em>not</em> approve it. Finance / Budget Officer records PBG, then Approve / Clarify / Reject with timestamp.</p>
+          <p>Creating a contract (RM) does <em>not</em> approve it. Finance / Budget Officer Approves PBG on Stage 9, then Approve / Clarify / Reject the contract with timestamp.</p>
         </div>
       </div>
 
@@ -8826,8 +8954,8 @@ function openContractApprovalDetail(contractId) {
           <i class="fa-solid fa-triangle-exclamation" style="color:#d97706"></i>
           <div>
             <strong>PBG not recorded yet</strong>
-            <p>Go to <strong>Stage 9 → Record PBG</strong> as Finance / Budget Officer, then return here to Approve.</p>
-            ${isBudgetOfficer() ? `<button type="button" class="btn btn-outline btn-sm" style="margin-top:0.5rem" onclick="closeModal();selectWorkflowStep(9);setTimeout(()=>openRecordPbgForm('${r.id}'),80)"><i class="fa-solid fa-building-columns"></i> Record PBG now</button>` : ''}
+            <p>Go to <strong>Stage 9 → Approve PBG</strong> as Finance / Budget Officer, then return here to Approve the contract.</p>
+            ${isBudgetOfficer() ? `<button type="button" class="btn btn-outline btn-sm" style="margin-top:0.5rem" onclick="closeModal();selectWorkflowStep(9);setTimeout(()=>openRecordPbgForm('${r.id}'),80)"><i class="fa-solid fa-building-columns"></i> Approve PBG now</button>` : ''}
           </div>
         </div>
       ` : ''}
@@ -8850,8 +8978,8 @@ function openContractApprovalDetail(contractId) {
           ${isBudgetOfficer() ? `
           <button type="button" class="btn btn-outline" onclick="submitContractApprovalForm('${r.id}','clarify')"><i class="fa-solid fa-envelope-open-text"></i> Seek clarification</button>
           <button type="button" class="btn btn-outline ca-btn-reject" onclick="submitContractApprovalForm('${r.id}','reject')"><i class="fa-solid fa-ban"></i> Reject</button>
-          <button type="button" class="btn btn-primary" onclick="submitContractApprovalForm('${r.id}','approve')" ${!pbgOk ? 'disabled title="Record PBG on Stage 9 first"' : ''}><i class="fa-solid fa-stamp"></i> Approve with timestamp</button>
-          ` : `<span class="download-confirm-hint" style="margin:0">View only for Resource Manager. Log in as <strong>Finance / Budget Officer</strong> (<code>budget@mphp.gov.in</code>) to Approve after recording PBG on Stage 9.</span>`}
+          <button type="button" class="btn btn-primary" onclick="submitContractApprovalForm('${r.id}','approve')" ${!pbgOk ? 'disabled title="Approve PBG on Stage 9 first"' : ''}><i class="fa-solid fa-stamp"></i> Approve with timestamp</button>
+          ` : `<span class="download-confirm-hint" style="margin:0">View only for Admin. Log in as <strong>Budget Officer</strong> (<code>Budget</code> / <code>Budget</code>) to Approve after recording PBG on Stage 9.</span>`}
         </div>
       `}
     </div>
@@ -9815,7 +9943,7 @@ function bindCreateContractSelectListeners() {
 function openCreateContractForm(preselectId) {
   if (currentRole !== 'gov') return;
   if (!isResourceManagerDesk()) {
-    showWfAlert('Only Resource Manager can create contracts. Finance / Budget Officer records PBG only.');
+    showWfAlert('Only Resource Manager can create contracts. Finance / Budget Officer Approves PBG only.');
     return;
   }
   const eligible = getEligibleCreateContractSources();
@@ -9942,7 +10070,7 @@ function submitCreateContractForm() {
     state: award.state || 'Madhya Pradesh',
     division: award.division || '—',
     category: award.category,
-    status: 'NOA issued',
+    status: 'Awaiting for approval',
     l1Vendor: award.vendor,
     noaNo: award.loaNo,
     noaDate: award.loaDate || today,
@@ -10016,13 +10144,13 @@ function submitCreateContractForm() {
         </p>
         <p style="margin-top:0.5rem">
           Template: <strong>${escapeHtmlLite(template.label)}</strong><br>
-          Next: <strong>Finance / Budget Officer</strong> records PBG on Stage 9, then Approves on Stage 10.
+          Next: <strong>Finance / Budget Officer</strong> Approves PBG on Stage 9, then Approves the contract on Stage 10.
         </p>
       </div>
       <div class="modal-inline-actions" style="margin-top:1rem;justify-content:center">
         <button type="button" class="btn btn-outline" onclick="closeModal()"><i class="fa-solid fa-xmark"></i> Close</button>
         <button type="button" class="btn btn-primary" onclick="closeModal();selectWorkflowStep(9)">
-          <i class="fa-solid fa-building-columns"></i> Go to Stage 9 (PBG)
+          <i class="fa-solid fa-building-columns"></i> Go to Stage 9 (Approve PBG)
         </button>
       </div>
     `);
@@ -12555,7 +12683,7 @@ function renderWorkflowDetailPanel(step, progress, total) {
     }
     if (isBudgetOfficer()) {
       actions.push(`<button type="button" class="btn btn-primary btn-sm" onclick="openRecordPbgForm()">
-        <i class="fa-solid fa-building-columns"></i> Record PBG
+        <i class="fa-solid fa-building-columns"></i> Approve PBG
       </button>`);
     }
     if (actions.length) headerAction = `<div class="wf-header-actions" style="display:flex;gap:0.5rem;flex-wrap:wrap;justify-content:flex-end">${actions.join('')}</div>`;
