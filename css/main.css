@@ -929,9 +929,30 @@ body:has(#authPage:not([style*="display: none"])) {
   flex-shrink: 0;
 }
 
+.sidebar-brand-logo {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: #000;
+  flex-shrink: 0;
+  display: block;
+}
+
+.sidebar-brand-text {
+  min-width: 0;
+}
+
 .sidebar-brand .brand-icon { width: 40px; height: 40px; font-size: 1.25rem; border-radius: 10px; }
-.sidebar-brand h2 { font-size: 1rem; font-weight: 800; }
-.sidebar-brand span { font-size: 0.75rem; font-weight: 600; color: rgba(255,255,255,0.75); display: block; margin-top: 0.1rem; }
+.sidebar-brand h2 {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 0.04em;
+  line-height: 1.15;
+  margin: 0;
+}
+.sidebar-brand span { font-size: 0.75rem; font-weight: 600; color: rgba(255,255,255,0.75); display: block; margin-top: 0.15rem; }
 
 .sidebar-nav {
   flex: 1;
@@ -2140,6 +2161,24 @@ body:has(#authPage:not([style*="display: none"])) {
 .wf-step.pending .wf-label { color: #64748b; font-weight: 600; }
 .wf-step.active .wf-label { color: var(--primary); font-weight: 800; }
 .wf-step.done .wf-label { color: #166534; font-weight: 700; }
+
+.wf-step.locked {
+  cursor: not-allowed;
+  opacity: 0.42;
+  pointer-events: none;
+}
+.wf-step.locked .wf-dot {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #94a3b8;
+}
+.wf-step.locked .wf-label {
+  color: #94a3b8;
+  font-weight: 500;
+}
+.wf-step.locked::after {
+  background: #e2e8f0;
+}
 
 .wf-step:focus-visible {
   outline: 2px solid var(--accent);

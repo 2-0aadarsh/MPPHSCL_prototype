@@ -3113,40 +3113,41 @@ function overwritePlainObject(target, source) {
   Object.assign(target, clonePlain(source));
 }
 
+/** CMVPMS (gov workflow) starts at Contract Approval — Stages 1–7 are locked in the sidebar flow. */
+const GOV_CMVPMS_MIN_STAGE = 8;
+
+function isGovCmvpmsLockedStage(id) {
+  return currentRole === 'gov' && Number(id) >= 1 && Number(id) < GOV_CMVPMS_MIN_STAGE;
+}
+
 function getGovActiveStageId() {
   if (govLifecycleComplete) return 14;
-  // Early jump to Renewal from Stage 1 — keep 14 as the viewed/active focus without marking 2–13 done
+  // Early jump to Renewal from Stage 8 — keep 14 as the viewed/active focus without marking 9–13 done
   if (currentWorkflowStep === 14 && !govSequentialCommitted) return 14;
-  if (!govIndentState.saved) {
-    const step = Number(currentWorkflowStep) || 1;
-    // Progress only within Stages 1–3 until indent is saved — ignore future previews (e.g. Award).
-    if (step >= 1 && step <= 3) return step;
-    return 1;
-  }
-  if (!govConsolidationState.approved) return 4;
-  if (!govBudgetState.verified) return 5;
-  if (!govTenderPrepState.finalReady) return 6;
-  const step = currentWorkflowStep || 7;
-  return Math.min(Math.max(step, 7), 14);
+
+  // CMVPMS: Stages 1–7 are locked out of scope. Progress tracks 8–14 from the current view
+  // (early indent/budget/tender gates are not required to work Stages 8+).
+  const step = Number(currentWorkflowStep) || GOV_CMVPMS_MIN_STAGE;
+  return Math.min(Math.max(step, GOV_CMVPMS_MIN_STAGE), 14);
 }
 
 /** Step to resume on next open — never a future preview (e.g. clicked Award while still on Indent). */
 function getGovResumeStep() {
   if (currentWorkflowStep === 14 && !govSequentialCommitted) return 14;
   const progress = getGovActiveStageId();
-  const step = Number(currentWorkflowStep) || progress || 1;
+  const step = Number(currentWorkflowStep) || progress || GOV_CMVPMS_MIN_STAGE;
   if (step > progress) return progress;
-  return Math.max(1, Math.min(14, step));
+  return Math.max(GOV_CMVPMS_MIN_STAGE, Math.min(14, step));
 }
 
 function syncGovWorkflowStatuses() {
   if (typeof GOV_WORKFLOW === 'undefined') return;
   if (currentRole && currentRole !== 'gov') return;
 
-  // Special case: Stage 1 → 14 jump (sequential path not started)
+  // Special case: Stage 8 → 14 jump (sequential path not started)
   if (currentWorkflowStep === 14 && !govSequentialCommitted && !govLifecycleComplete) {
     GOV_WORKFLOW.forEach(s => {
-      if (s.id === 1) s.status = 'done';
+      if (s.id === GOV_CMVPMS_MIN_STAGE) s.status = 'done';
       else if (s.id === 14) s.status = 'active';
       else s.status = 'pending';
     });
@@ -3331,7 +3332,10 @@ function applyGovLifecycleSnapshot(saved) {
   if (!govRenewalState.category) govRenewalState.category = 'all';
   govSequentialCommitted = !!saved.sequentialCommitted;
   govLifecycleComplete = !!saved.lifecycleComplete;
-  currentWorkflowStep = Math.max(1, Math.min(14, Number(saved.currentStep) || 1));
+  currentWorkflowStep = Math.max(
+    GOV_CMVPMS_MIN_STAGE,
+    Math.min(14, Number(saved.currentStep) || GOV_CMVPMS_MIN_STAGE)
+  );
   syncGovWorkflowStatuses();
   // Never land on a future preview stage after restore (e.g. Award while still on Need/Indent).
   currentWorkflowStep = getGovResumeStep();
@@ -3339,8 +3343,8 @@ function applyGovLifecycleSnapshot(saved) {
 }
 
 /**
- * Restore or initialize Resource Manager procurement lifecycle.
- * Preserves Stage 1 → Stage 14 jump when sequentialCommitted is still false.
+ * Restore or initialize Resource Manager procurement lifecycle (CMVPMS).
+ * Preserves Stage 8 → Stage 14 jump when sequentialCommitted is still false.
  */
 function initGovLifecycleForSession(user) {
   const saved = readGovLifecycleSnapshot(user);
@@ -3349,12 +3353,12 @@ function initGovLifecycleForSession(user) {
     return { resumed: true, step: currentWorkflowStep };
   }
   resetGovLifecycleInMemory();
-  currentWorkflowStep = 1;
+  currentWorkflowStep = GOV_CMVPMS_MIN_STAGE;
   govSequentialCommitted = false;
   govLifecycleComplete = false;
   syncGovWorkflowStatuses();
   persistGovLifecycle();
-  return { resumed: false, step: 1 };
+  return { resumed: false, step: GOV_CMVPMS_MIN_STAGE };
 }
 
 function maskSensitiveValue(value) {
@@ -3685,11 +3689,11 @@ function renderTopbar() {
       ? ['Alerts & Work Queue', 'Prioritized government actions — approvals, payments, vendor SLA breaches, and tender pipeline']
       : ['Alerts & Work Queue', 'Prioritized actions by severity, owner, due date and record type'],
     'sla-desk': currentRole === 'gov'
-      ? ['SLA Communication', 'Respond to vendor escalations and resolve issues per internal response hierarchy']
-      : ['SLA Communication', 'Escalate and resolve issues with government officers as per SLA hierarchy'],
+      ? ['Communication', 'Respond to vendor escalations and resolve issues per internal response hierarchy']
+      : ['Communication', 'Escalate and resolve issues with government officers as per SLA hierarchy'],
     workflow: currentRole === 'vendor'
-      ? ['Bid-to-Pay Lifecycle', '']
-      : ['Procurement Lifecycle', 'Need → DVDMS stock/indent → award & contract → PO in DVDMS'],
+      ? ['Source-to-Pay', '']
+      : ['CMVPMS', 'Contract Approval → Award → PO → GRN → Payment · Stages 8–14'],
     'contract-mgmt': ['Contract Management', 'DVDMS / NIC synced register — LOI → PBG → draft → signed → supply · AI/ML for alerts'],
     'vendor-reg': ['Vendor Management', 'NIC registration façade + DVDMS sync — AI eligibility & scorecard (no duplicate master forms)'],
     sourcing: ['Sourcing & Award', 'Evaluation through award — aligns with Stages 7–9'],
@@ -3870,8 +3874,8 @@ function navigateTo(page, arg = {}) {
     tendersListState.page = 1;
   }
   if (page === 'workflow' && currentRole === 'gov') {
-    // Resume saved progress — do NOT force Stage 1 or clear Stage 14 jump eligibility.
-    ensureWorkflowViewStep();
+    // CMVPMS opens on Contract Approval (Stage 8); Stages 1–7 stay locked.
+    currentWorkflowStep = GOV_CMVPMS_MIN_STAGE;
     syncGovWorkflowStatuses();
     persistGovLifecycle();
   }
@@ -4863,6 +4867,10 @@ function getWorkflowSteps() {
 
 function getWorkflowStepClasses(step, viewId) {
   const classes = ['wf-step'];
+  if (isGovCmvpmsLockedStage(step.id)) {
+    classes.push('locked', 'pending');
+    return classes.join(' ');
+  }
   if (step.id < viewId) classes.push('done');
   else if (step.id === viewId) classes.push('active');
   else classes.push('pending');
@@ -4870,6 +4878,7 @@ function getWorkflowStepClasses(step, viewId) {
 }
 
 function wfDotContent(step, viewId) {
+  if (isGovCmvpmsLockedStage(step.id)) return step.id;
   if (step.id < viewId) return '<i class="fa-solid fa-check"></i>';
   return step.id;
 }
@@ -4881,11 +4890,14 @@ function getRegistrationCategories() {
 function ensureWorkflowViewStep() {
   const total = getWorkflowSteps().length;
   if (currentRole === 'gov') {
-    if (!currentWorkflowStep || currentWorkflowStep < 1 || currentWorkflowStep > total) {
+    if (!currentWorkflowStep || currentWorkflowStep < GOV_CMVPMS_MIN_STAGE || currentWorkflowStep > total) {
       const saved = readGovLifecycleSnapshot();
-      currentWorkflowStep = saved
-        ? Math.max(1, Math.min(total, Number(saved.currentStep) || 1))
-        : 1;
+      const savedStep = saved
+        ? Math.max(GOV_CMVPMS_MIN_STAGE, Math.min(total, Number(saved.currentStep) || GOV_CMVPMS_MIN_STAGE))
+        : GOV_CMVPMS_MIN_STAGE;
+      currentWorkflowStep = savedStep;
+    } else {
+      currentWorkflowStep = Math.max(GOV_CMVPMS_MIN_STAGE, currentWorkflowStep);
     }
     syncGovWorkflowStatuses();
     currentWorkflowStep = getGovResumeStep();
@@ -4917,13 +4929,16 @@ function renderWorkflow() {
 
   return `
     <div class="wf-page-header">
-      <p class="wf-page-hint">${isGov ? '14 stages · progress is saved automatically · from Stage 1 you may still jump to Renewal (14)' : '10 stages · progress is saved automatically — you resume where you left off'}</p>
+      <p class="wf-page-hint">${isGov ? 'CMVPMS · Stages 1–7 locked · starts at Contract Approval (8) · progress saved automatically · from Stage 8 you may still jump to Renewal (14)' : '10 stages · progress is saved automatically — you resume where you left off'}</p>
     </div>
-    <div class="workflow-timeline" role="tablist" aria-label="Procurement lifecycle stages">
-      ${steps.map(s => `<div class="${getWorkflowStepClasses(s, viewId)}" data-step="${s.id}" role="tab" aria-selected="${s.id === viewId}" tabindex="0" onclick="selectWorkflowStep(${s.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectWorkflowStep(${s.id})}">
+    <div class="workflow-timeline" role="tablist" aria-label="CMVPMS stages">
+      ${steps.map(s => {
+        const locked = isGovCmvpmsLockedStage(s.id);
+        return `<div class="${getWorkflowStepClasses(s, viewId)}" data-step="${s.id}" role="tab" aria-selected="${s.id === viewId}" aria-disabled="${locked ? 'true' : 'false'}" ${locked ? 'tabindex="-1" title="Locked — CMVPMS starts at Stage 8"' : `tabindex="0" onclick="selectWorkflowStep(${s.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectWorkflowStep(${s.id})}"`}>
         <div class="wf-dot">${wfDotContent(s, viewId)}</div>
         <div class="wf-label" title="${s.name}">${s.name}</div>
-      </div>`).join('')}
+      </div>`;
+      }).join('')}
     </div>
     <div class="wf-detail" id="wfDetail">
       ${renderWorkflowDetailPanel(steps.find(s => s.id === viewId) || steps[0], progress, total)}
@@ -4937,8 +4952,8 @@ function renderWorkflowViewBanner(step, progress) {
     if (!govSequentialCommitted) {
       return `<div class="wf-view-banner wf-view-banner--past">
         <i class="fa-solid fa-bolt"></i>
-        <span>Opened <strong>Renewal (Stage 14)</strong> directly from Stage 1. Finalize renewals here, or return to Stage 1 to continue the sequential lifecycle.</span>
-        <button type="button" class="btn btn-outline btn-sm" onclick="selectWorkflowStep(1)">Back to Stage 1</button>
+        <span>Opened <strong>Renewal (Stage 14)</strong> directly from Stage 8. Finalize renewals here, or return to Contract Approval to continue CMVPMS.</span>
+        <button type="button" class="btn btn-outline btn-sm" onclick="selectWorkflowStep(${GOV_CMVPMS_MIN_STAGE})">Back to Stage 8</button>
       </div>`;
     }
     if (progress < 14 && currentWorkflowStep === 14) {
@@ -5044,7 +5059,7 @@ function renderWorkflowStepNav(step, total) {
 
   return `${isLast && lifecycleDone ? renderLifecycleCompleteBanner() : ''}
   <div class="wf-step-nav">
-    <button type="button" class="btn btn-outline" onclick="goWorkflowStep(-1)" ${step.id <= 1 ? 'disabled' : ''}>
+    <button type="button" class="btn btn-outline" onclick="goWorkflowStep(-1)" ${(currentRole === 'gov' ? step.id <= GOV_CMVPMS_MIN_STAGE : step.id <= 1) ? 'disabled' : ''}>
       <i class="fa-solid fa-arrow-left"></i> Previous Stage
     </button>
     <span class="wf-step-indicator">Stage ${step.id} of ${total}${lifecycleDone && isLast ? ' · Complete' : ''}</span>
@@ -8810,6 +8825,265 @@ function submitGeneratePurchaseOrder() {
   }, 80);
 }
 
+/* ========== Stage 8 — Create contract form (CMVPMS) ========== */
+const CREATE_CONTRACT_SOURCE_PLACEHOLDER = 'Select award / LOA source…';
+const CREATE_CONTRACT_TEMPLATE_PLACEHOLDER = 'Select contract template…';
+
+function getContractFormTemplates() {
+  return [
+    { id: 'tpl-rc', label: 'Rate Contract (Drugs / Consumables)', hint: '24-month RC with price-fall clause · synced T&C from NIT' },
+    { id: 'tpl-capex', label: 'Capital Equipment Supply & Install', hint: 'Warranty + AMC annexure · installation milestones' },
+    { id: 'tpl-svc', label: 'Service / Manpower SLA', hint: 'Monthly billing · biometric / uptime SLA pack' },
+    { id: 'tpl-oth', label: 'General Goods / Others', hint: 'Standard GFR / NIT terms · LD + PBG schedule' }
+  ];
+}
+
+function getEligibleCreateContractSources() {
+  const awards = typeof AWARD_STAGE_DATA !== 'undefined' ? (AWARD_STAGE_DATA.awards || []) : [];
+  return awards.filter(a =>
+    a.loaNo && a.loaNo !== '—'
+    && a.vendor && !String(a.vendor).includes('Pending')
+  );
+}
+
+function createContractSourceLabel(a) {
+  return `${a.id} — ${a.title} (${a.vendor})`;
+}
+
+function resolveCreateContractSource() {
+  const label = typeof getCustomSelectValue === 'function' ? getCustomSelectValue('createCntSource') : '';
+  if (!label || label === CREATE_CONTRACT_SOURCE_PLACEHOLDER) return null;
+  const id = (label.split(' — ')[0] || '').trim();
+  return getEligibleCreateContractSources().find(a => a.id === id) || null;
+}
+
+function resolveCreateContractTemplate() {
+  const label = typeof getCustomSelectValue === 'function' ? getCustomSelectValue('createCntTemplate') : '';
+  if (!label || label === CREATE_CONTRACT_TEMPLATE_PLACEHOLDER) return null;
+  return getContractFormTemplates().find(t => t.label === label) || null;
+}
+
+function fillCreateContractFormFields(a) {
+  const set = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.value = val == null || val === '' ? '' : String(val);
+  };
+  if (!a) {
+    ['createCntTenderId', 'createCntTitle', 'createCntCategory', 'createCntDivision',
+      'createCntVendor', 'createCntLoa', 'createCntValue', 'createCntPbg', 'createCntContractId'
+    ].forEach(id => set(id, ''));
+    return;
+  }
+  set('createCntTenderId', a.tenderId);
+  set('createCntTitle', a.title);
+  set('createCntCategory', a.category);
+  set('createCntDivision', `${a.state || 'Madhya Pradesh'} · ${a.division || '—'}`);
+  set('createCntVendor', a.vendor);
+  set('createCntLoa', `${a.loaNo} · ${a.loaDate || '—'}`);
+  set('createCntValue', a.value);
+  set('createCntPbg', a.pbgAmount && a.pbgAmount !== '—' ? a.pbgAmount : '5% – 10% of contract value (SFMS / e-BG)');
+  set('createCntContractId', a.contractId && a.contractId !== '—' ? a.contractId : `CNT-NEW-${String(a.id).slice(-4)}`);
+}
+
+function onCreateContractSourceChange() {
+  fillCreateContractFormFields(resolveCreateContractSource());
+}
+
+function onCreateContractTemplateChange() {
+  const t = resolveCreateContractTemplate();
+  const hint = document.getElementById('createCntTemplateHint');
+  if (hint) hint.textContent = t?.hint || '';
+}
+
+function bindCreateContractSelectListeners() {
+  document.querySelector('.custom-select[data-select-id="createCntSource"]')
+    ?.addEventListener('change', onCreateContractSourceChange);
+  document.querySelector('.custom-select[data-select-id="createCntTemplate"]')
+    ?.addEventListener('change', onCreateContractTemplateChange);
+}
+
+function openCreateContractForm(preselectId) {
+  if (currentRole !== 'gov') return;
+  const eligible = getEligibleCreateContractSources();
+  if (!eligible.length) {
+    showWfAlert('No LOA-linked awards are available to create a contract form right now.');
+    return;
+  }
+  const preselected = preselectId ? eligible.find(a => a.id === preselectId) : null;
+  const templates = getContractFormTemplates();
+  const sourceLabels = eligible.map(createContractSourceLabel);
+  const templateLabels = templates.map(t => t.label);
+  const sourceSelected = preselected ? createContractSourceLabel(preselected) : CREATE_CONTRACT_SOURCE_PLACEHOLDER;
+  const sourceSelect = customSelectHTML('Award / LOA source', 'createCntSource', sourceLabels, sourceSelected, true)
+    .replace('class="form-group"', 'class="form-group full"');
+  const templateSelect = customSelectHTML('Contract template', 'createCntTemplate', templateLabels, CREATE_CONTRACT_TEMPLATE_PLACEHOLDER, true)
+    .replace('class="form-group"', 'class="form-group full"');
+
+  openModal('Create contract form', `
+    <div class="indent-modal-form kpi-detail">
+      <p class="consol-detail-lead" style="margin-top:0">
+        Prepare the contract management pack from a synced <strong>Award / LOA</strong> — LOI accept, PBG schedule and
+        standard T&amp;C are pulled from NIC / DVDMS / tender templates (no master-data re-keying). Submit to register
+        the draft under Stage 8 Contract Approval.
+      </p>
+
+      <h4 class="budget-subhead">1. Source award</h4>
+      <div class="form-grid wf-form-grid">
+        ${sourceSelect}
+      </div>
+
+      <h4 class="budget-subhead">2. Tender &amp; bidder (synced)</h4>
+      <div class="form-grid wf-form-grid">
+        <div class="form-group"><label>Tender / RC No.</label><input id="createCntTenderId" type="text" readonly placeholder="—"></div>
+        <div class="form-group"><label>Contract ID</label><input id="createCntContractId" type="text" readonly placeholder="—"></div>
+        <div class="form-group full"><label>Title</label><input id="createCntTitle" type="text" readonly placeholder="—"></div>
+        <div class="form-group"><label>Category</label><input id="createCntCategory" type="text" readonly placeholder="—"></div>
+        <div class="form-group"><label>State / Division</label><input id="createCntDivision" type="text" readonly placeholder="—"></div>
+        <div class="form-group"><label>L1 / selected bidder</label><input id="createCntVendor" type="text" readonly placeholder="—"></div>
+        <div class="form-group"><label>LOA / LOI</label><input id="createCntLoa" type="text" readonly placeholder="—"></div>
+        <div class="form-group"><label>Est. value</label><input id="createCntValue" type="text" readonly placeholder="—"></div>
+        <div class="form-group"><label>PBG schedule</label><input id="createCntPbg" type="text" readonly placeholder="—"></div>
+      </div>
+
+      <h4 class="budget-subhead">3. Contract pack &amp; gate</h4>
+      <div class="form-grid wf-form-grid">
+        ${templateSelect}
+        <p id="createCntTemplateHint" class="download-confirm-hint form-group full" style="margin:0"></p>
+        ${datePickerHTML('createCntAgreementDate', '', 'Proposed agreement date')}
+        <div class="form-group"><label>Contract period</label>
+          <input id="createCntPeriod" type="text" value="24 months from agreement date" placeholder="e.g. 24 months from agreement date">
+        </div>
+        <div class="form-group full"><label>Delivery / SLA terms</label>
+          <input id="createCntDelivery" type="text" value="As per NIT / rate-contract schedule" placeholder="Delivery or SLA terms">
+        </div>
+        <div class="form-group full"><label>Remarks</label>
+          <textarea id="createCntRemarks" rows="2" placeholder="Any conditions before PBG / signing gate…"></textarea>
+        </div>
+      </div>
+
+      <div class="modal-inline-actions" style="margin-top:1rem">
+        <button type="button" class="btn btn-outline" onclick="closeModal()"><i class="fa-solid fa-xmark"></i> Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="submitCreateContractForm()">
+          <i class="fa-solid fa-file-signature"></i> Create contract draft
+        </button>
+      </div>
+    </div>
+  `, { wide: true, large: true });
+
+  if (typeof initCustomSelects === 'function') initCustomSelects();
+  bindCreateContractSelectListeners();
+  fillCreateContractFormFields(preselected || null);
+}
+
+function submitCreateContractForm() {
+  const award = resolveCreateContractSource();
+  const template = resolveCreateContractTemplate();
+  if (!award) {
+    showWfAlert('Please select an award / LOA source first.');
+    return;
+  }
+  if (!template) {
+    showWfAlert('Please select a contract template before creating the draft.');
+    return;
+  }
+
+  const today = formatDateDMY(APP_TODAY);
+  const agreementDate = document.getElementById('createCntAgreementDate')?.value?.trim() || today;
+  const period = document.getElementById('createCntPeriod')?.value?.trim() || '24 months from agreement date';
+  const delivery = document.getElementById('createCntDelivery')?.value?.trim() || 'As per NIT / rate-contract schedule';
+  const remarks = document.getElementById('createCntRemarks')?.value?.trim() || '';
+  const contractId = document.getElementById('createCntContractId')?.value?.trim()
+    || award.contractId
+    || `CNT-2026-${String(Date.now()).slice(-4)}`;
+
+  const approvalRow = {
+    id: contractId,
+    tenderId: award.tenderId,
+    title: award.title,
+    state: award.state || 'Madhya Pradesh',
+    division: award.division || '—',
+    category: award.category,
+    status: 'NOA issued',
+    l1Vendor: award.vendor,
+    noaNo: award.loaNo,
+    noaDate: award.loaDate || today,
+    agreementNo: `Draft ${contractId.replace('CNT-', 'AGR/')}`,
+    value: award.value,
+    legalStatus: 'Under review',
+    financeStatus: 'Under review',
+    signedOn: '—',
+    date: today,
+    remarks: remarks
+      ? `${remarks} · Draft created ${today} via ${template.label}. Period: ${period}. Delivery: ${delivery}.`
+      : `Draft created ${today} via ${template.label}. Period: ${period}. Proposed agreement: ${agreementDate}.`
+  };
+
+  if (typeof CONTRACT_APPROVAL_DATA !== 'undefined' && Array.isArray(CONTRACT_APPROVAL_DATA.contracts)) {
+    const idx = CONTRACT_APPROVAL_DATA.contracts.findIndex(c => c.id === contractId || c.tenderId === award.tenderId);
+    if (idx >= 0) {
+      CONTRACT_APPROVAL_DATA.contracts[idx] = { ...CONTRACT_APPROVAL_DATA.contracts[idx], ...approvalRow };
+    } else {
+      CONTRACT_APPROVAL_DATA.contracts.unshift(approvalRow);
+    }
+    if (CONTRACT_APPROVAL_DATA.meta) {
+      CONTRACT_APPROVAL_DATA.meta.lastUpdated = `${today} (demo)`;
+    }
+  }
+
+  if (typeof CONTRACTS !== 'undefined' && Array.isArray(CONTRACTS)) {
+    const existing = CONTRACTS.find(c => c.id === contractId || c.tenderId === award.tenderId);
+    const cmRow = {
+      id: contractId,
+      tenderId: award.tenderId,
+      title: award.title,
+      vendor: award.vendor,
+      category: award.category,
+      value: award.value,
+      pbg: award.pbgStatus === 'Received' ? 'Active' : 'Pending',
+      pbgAmount: award.pbgAmount || '—',
+      delivery: delivery,
+      status: 'In Progress',
+      date: today,
+      startDate: agreementDate,
+      endDate: '—',
+      poId: '—',
+      division: award.division || '—',
+      remarks: approvalRow.remarks
+    };
+    if (existing) Object.assign(existing, cmRow);
+    else CONTRACTS.unshift(cmRow);
+  }
+
+  if (!award.contractId || award.contractId === '—') award.contractId = contractId;
+
+  try { persistGovLifecycle?.(); } catch (_) { /* optional */ }
+  closeModal();
+  refreshWorkflowUI();
+  setTimeout(() => {
+    openModal('Contract draft created', `
+      <div class="sync-success-msg">
+        <div class="sync-success-icon"><i class="fa-solid fa-circle-check"></i></div>
+        <h4>Contract form registered</h4>
+        <p>
+          <strong>${escapeHtmlLite(contractId)}</strong> drafted for
+          <strong>${escapeHtmlLite(award.title)}</strong> · bidder
+          <strong>${escapeHtmlLite(award.vendor)}</strong>.
+        </p>
+        <p style="margin-top:0.5rem">
+          Template: <strong>${escapeHtmlLite(template.label)}</strong><br>
+          Status: <strong>NOA issued</strong> · open the approval gate to timestamp Approve / Clarify / Reject.
+        </p>
+      </div>
+      <div class="modal-inline-actions" style="margin-top:1rem;justify-content:center">
+        <button type="button" class="btn btn-outline" onclick="closeModal()"><i class="fa-solid fa-xmark"></i> Close</button>
+        <button type="button" class="btn btn-primary" onclick="closeModal();openContractApprovalDetail('${contractId}')">
+          <i class="fa-solid fa-stamp"></i> Open approval gate
+        </button>
+      </div>
+    `);
+  }, 80);
+}
+
 /* ========== Stage 11 GRN & Inspection ========== */
 function getGrnStatusDate(r) {
   if (!r) return '—';
@@ -11335,7 +11609,11 @@ function renderWorkflowDetailPanel(step, progress, total) {
           : step.name}</h3>
         ${step.desc ? `<p>${step.desc}</p>` : ''}
       </div>
-      ${showStatusBadge ? `<span class="badge badge-${badgeKind}">${badgeLabel}</span>` : ''}
+      ${currentRole === 'gov' && step.id === 8
+        ? `<button type="button" class="btn btn-primary btn-sm" onclick="openCreateContractForm()">
+            <i class="fa-solid fa-file-contract"></i> Create contract form
+          </button>`
+        : (showStatusBadge ? `<span class="badge badge-${badgeKind}">${badgeLabel}</span>` : '')}
     </div>
     ${renderWorkflowChecklist(step)}
     ${renderWorkflowDetail(step, canEdit)}
@@ -13167,18 +13445,22 @@ function selectWorkflowStep(id) {
   if (!step) return;
 
   if (currentRole === 'gov') {
+    if (isGovCmvpmsLockedStage(id)) {
+      showWfAlert('CMVPMS starts at Stage 8 (Contract Approval). Stages 1–7 are locked and cannot be opened here.');
+      return;
+    }
     const from = currentWorkflowStep;
-    // From Stage 1, Resource Manager may jump directly to Stage 14 (Renewal).
-    // After entering Stages 2–13, Stage 14 is only reachable sequentially (from 13 or already on 14).
+    // From Stage 8, Resource Manager may jump directly to Stage 14 (Renewal).
+    // After entering Stages 9–13, Stage 14 is only reachable sequentially (from 13 or already on 14).
     if (id === 14 && from !== 14) {
-      const allowedJump = from === 1 && !govSequentialCommitted;
+      const allowedJump = from === GOV_CMVPMS_MIN_STAGE && !govSequentialCommitted;
       const allowedSequential = from === 13 || govLifecycleComplete;
       if (!allowedJump && !allowedSequential) {
-        showWfAlert('Once you proceed past Stage 1 into the sequential lifecycle (Stage 2 onwards), you cannot jump directly to Renewal (Stage 14). Complete Stages 2–13 in order to reach Renewal sequentially.');
+        showWfAlert('Once you proceed past Stage 8 into the sequential CMVPMS flow (Stage 9 onwards), you cannot jump directly to Renewal (Stage 14). Complete Stages 9–13 in order to reach Renewal sequentially.');
         return;
       }
     }
-    if (id >= 2 && id <= 13) {
+    if (id >= 9 && id <= 13) {
       govSequentialCommitted = true;
     }
   }
@@ -13213,6 +13495,7 @@ function goWorkflowStep(delta) {
   const next = currentWorkflowStep + delta;
   const total = getWorkflowSteps().length;
   if (next < 1 || next > total) return;
+  if (currentRole === 'gov' && isGovCmvpmsLockedStage(next)) return;
 
   if (currentRole === 'vendor' && delta > 0) {
     const err = validateVendorStageFields(currentWorkflowStep);
@@ -15163,8 +15446,8 @@ function renderSettings() {
   return `<div class="wf-detail settings-page">
     <h3>Branding & Configuration</h3>
     <div class="form-grid mt-2">
-      <div class="form-group"><label>Organization Name</label><input type="text" value="MP Health Procurement"></div>
-      <div class="form-group"><label>Solution Branding</label><input type="text" value="MP Health Procurement Solution"></div>
+      <div class="form-group"><label>Organization Name</label><input type="text" value="MPPHSCL"></div>
+      <div class="form-group"><label>Solution Branding</label><input type="text" value="MPPHSCL"></div>
       <div class="form-group full"><label>Logo</label><input type="file" accept="image/*"></div>
       <div class="form-group"><label>Primary Color</label><input type="color" value="#003D5D"></div>
       <div class="form-group"><label>Accent Color</label><input type="color" value="#00bfa5"></div>
