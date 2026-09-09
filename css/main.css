@@ -1,15 +1,17 @@
 /* MP Health Procurement ? aligned with MPPHSCL DVDMS (mpaushadhi.mp.gov.in) */
 :root {
-  /* DVDMS / IMCS brand (from portal CSS: #086FA6, #064490, #1a6fca, Poppins/Cairo) */
+  /* Shared RM + Vendor chrome — teal sidebar language + DVDMS blue actions (Poppins/Cairo) */
   --primary: #086FA6;
   --primary-light: #1a6fca;
   --primary-dark: #064490;
-  --accent: #50a3ea;
-  --accent-glow: rgba(80, 163, 234, 0.35);
+  --accent: #00bfa5;
+  --accent-glow: rgba(0, 191, 165, 0.32);
   --gov: #086FA6;
-  --gov-light: #1a6fca;
+  --gov-light: #00897b;
   --vendor: #086FA6;
-  --vendor-light: #1a6fca;
+  --vendor-light: #00897b;
+  --brand-gradient: linear-gradient(135deg, #086FA6, #00897b);
+  --sidebar-gradient: linear-gradient(180deg, #004d40 0%, #086FA6 100%);
   --danger: #e74c3c;
   --warning: #f57c00;
   --success: #148d04;
@@ -81,7 +83,7 @@ body:has(#authPage:not([style*="display: none"])) {
 
 .sup-badge.zero { display: none; }
 
-/* Sidebar nav count badges ??? readable on dark sidebar, not alarm-red */
+/* Sidebar nav count badges — shared RM + Vendor (teal chrome) */
 .nav-badge {
   display: inline-flex;
   align-items: center;
@@ -94,7 +96,7 @@ body:has(#authPage:not([style*="display: none"])) {
   line-height: 1;
   letter-spacing: 0.01em;
   font-variant-numeric: tabular-nums;
-  color: #1e3a5f;
+  color: #14532d;
   background: rgba(255, 255, 255, 0.88);
   border: 1px solid rgba(255, 255, 255, 0.95);
   border-radius: 6px;
@@ -105,14 +107,14 @@ body:has(#authPage:not([style*="display: none"])) {
 
 .nav-item:hover .nav-badge {
   background: #fff;
-  color: #086FA6;
+  color: #00695c;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.22);
 }
 
 .nav-item.active .nav-badge {
   color: #004d40;
   background: #fff;
-  border-color: rgba(0, 191, 165, 0.45);
+  border-color: rgba(255, 255, 255, 0.5);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
 
@@ -564,7 +566,7 @@ body:has(#authPage:not([style*="display: none"])) {
   font-size: 1rem;
   flex-shrink: 0;
 }
-.auth-otp-avatar--gov { background: linear-gradient(135deg, #1a6fca, #086FA6); }
+.auth-otp-avatar--gov,
 .auth-otp-avatar--vendor { background: linear-gradient(135deg, #00897b, #00695c); }
 
 .auth-otp-profile-text strong {
@@ -731,7 +733,7 @@ body:has(#authPage:not([style*="display: none"])) {
 .brand-icon {
   width: 56px;
   height: 56px;
-  background: linear-gradient(135deg, var(--accent), #00897b);
+  background: var(--brand-gradient);
   border-radius: 14px;
   display: flex;
   align-items: center;
@@ -824,7 +826,7 @@ body:has(#authPage:not([style*="display: none"])) {
 
 .login-card:hover::before { opacity: 1; }
 
-.login-card.gov:hover { border-color: rgba(57, 73, 171, 0.6); }
+.login-card.gov:hover,
 .login-card.vendor:hover { border-color: rgba(0, 137, 123, 0.6); }
 
 .login-card-icon {
@@ -838,10 +840,7 @@ body:has(#authPage:not([style*="display: none"])) {
   margin-bottom: 1.5rem;
 }
 
-.login-card.gov .login-card-icon {
-  background: linear-gradient(135deg, #1a6fca, #086FA6);
-}
-
+.login-card.gov .login-card-icon,
 .login-card.vendor .login-card-icon {
   background: linear-gradient(135deg, #00897b, #00695c);
 }
@@ -871,11 +870,7 @@ body:has(#authPage:not([style*="display: none"])) {
   transition: var(--transition);
 }
 
-.login-card.gov .btn-enter {
-  background: #fff;
-  color: var(--gov);
-}
-
+.login-card.gov .btn-enter,
 .login-card.vendor .btn-enter {
   background: var(--accent);
   color: #fff;
@@ -908,7 +903,8 @@ body:has(#authPage:not([style*="display: none"])) {
 
 .sidebar {
   width: var(--sidebar-w);
-  background: var(--primary);
+  /* Shared RM + Vendor chrome (teal → DVDMS blue) */
+  background: var(--sidebar-gradient);
   color: #fff;
   display: flex;
   flex-direction: column;
@@ -917,11 +913,11 @@ body:has(#authPage:not([style*="display: none"])) {
   z-index: 100;
   transition: var(--transition);
   overflow: hidden;
-  box-shadow: 4px 0 24px rgba(0, 61, 93, 0.18);
+  box-shadow: 4px 0 24px rgba(0, 77, 64, 0.22);
 }
 
 .sidebar.vendor-theme {
-  background: linear-gradient(180deg, #004d40 0%, var(--vendor) 100%);
+  background: var(--sidebar-gradient);
 }
 
 .sidebar-brand {
@@ -998,7 +994,7 @@ body:has(#authPage:not([style*="display: none"])) {
 .nav-item.active {
   background: rgba(255,255,255,0.15);
   color: #fff;
-  border-left-color: var(--accent);
+  border-left-color: #00bfa5;
   font-weight: 700;
 }
 
@@ -1239,7 +1235,7 @@ body:has(#authPage:not([style*="display: none"])) {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--primary-light), var(--accent));
+  background: var(--brand-gradient);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1358,8 +1354,8 @@ body:has(#authPage:not([style*="display: none"])) {
 }
 
 .cat-tab.active {
-  background: var(--primary);
-  border-color: var(--primary);
+  background: var(--brand-gradient);
+  border-color: #00897b;
   color: #fff;
   box-shadow: none;
 }
@@ -1539,8 +1535,8 @@ body:has(#authPage:not([style*="display: none"])) {
 }
 
 .analytics-fy-chip.active {
-  background: var(--primary);
-  border-color: var(--primary);
+  background: var(--brand-gradient);
+  border-color: #00897b;
   color: #fff;
 }
 
@@ -1790,7 +1786,7 @@ body:has(#authPage:not([style*="display: none"])) {
 }
 
 .analytics-seg-btn.active {
-  background: var(--primary);
+  background: var(--brand-gradient);
   color: #fff;
 }
 
@@ -1831,7 +1827,7 @@ body:has(#authPage:not([style*="display: none"])) {
   border-color: var(--primary-light);
 }
 
-.kpi-card.blue::after { background: var(--primary); }
+.kpi-card.blue::after { background: var(--brand-gradient); }
 .kpi-card.green::after { background: var(--success); }
 .kpi-card.orange::after { background: var(--warning); }
 .kpi-card.red::after { background: var(--danger); }
@@ -3977,8 +3973,15 @@ body:has(#authPage:not([style*="display: none"])) {
   transition: var(--transition);
 }
 
-.btn-primary { background: var(--primary); color: #fff; }
-.btn-primary:hover { background: var(--primary-light); }
+.btn-primary {
+  background: var(--brand-gradient);
+  color: #fff;
+  border: 1px solid transparent;
+}
+.btn-primary:hover {
+  background: linear-gradient(135deg, #064490, #00695c);
+  color: #fff;
+}
 .btn-success { background: var(--success); color: #fff; }
 .btn-danger {
   background: #dc2626;
@@ -5031,9 +5034,15 @@ body:has(#authPage:not([style*="display: none"])) {
 
 .modal-body { padding: 1.5rem; }
 
-.modal--wide { max-width: 920px; }
-.modal--xl { max-width: min(1100px, 96vw); }
-.modal--lg { max-height: 88vh; }
+.modal--wide { max-width: min(1100px, 96vw); }
+.modal--xl { max-width: min(1380px, 98vw); }
+.modal--xxl { max-width: min(1560px, 98vw); }
+.modal--lg { max-height: 90vh; }
+
+.modal--xl .modal-body,
+.modal--xxl .modal-body {
+  overflow-x: hidden;
+}
 
 /* Guide modal */
 .guide-modal-intro {
@@ -5486,35 +5495,56 @@ body:has(#authPage:not([style*="display: none"])) {
 .kpi-chip strong { color: #0f172a; font-weight: 700; }
 .kpi-chip em { font-style: normal; color: #64748b; font-size: 0.72rem; }
 
-.kpi-detail-table { margin-bottom: 0; }
+.kpi-detail-table { margin-bottom: 0; overflow-x: hidden; }
 
 .kpi-detail-table--scroll {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow-x: hidden;
 }
 
 .kpi-detail-table--scroll .data-table--modal {
-  min-width: 100%;
+  min-width: 0;
+  width: 100%;
 }
 
 .data-table--modal {
-  font-size: 0.82rem;
+  font-size: 0.8rem;
+  width: 100%;
+  table-layout: auto;
 }
 
 .data-table--modal th,
 .data-table--modal td {
-  padding: 0.55rem 0.65rem;
+  padding: 0.5rem 0.55rem;
+  white-space: normal;
+  vertical-align: top;
+  word-break: break-word;
+}
+
+.data-table--modal .cell-nowrap,
+.data-table--modal td.cell-nowrap,
+.data-table--modal th.cell-nowrap {
   white-space: nowrap;
 }
 
 .data-table--modal .cell-vendor {
   white-space: normal;
-  min-width: 140px;
-  max-width: 180px;
+  min-width: 9rem;
+  max-width: 14rem;
+}
+
+.data-table--modal .cell-title {
+  min-width: 10rem;
+  max-width: 18rem;
 }
 
 .data-table--vendor-score {
-  min-width: 880px;
+  min-width: 0;
+  width: 100%;
+}
+
+.data-table--vendor-score th {
+  font-size: 0.72rem;
+  line-height: 1.25;
 }
 
 .data-table--modal th:first-child,
@@ -5523,12 +5553,102 @@ body:has(#authPage:not([style*="display: none"])) {
   text-align: center;
   color: #64748b;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .kpi-detail-table--scroll::after {
-  content: '';
-  display: block;
-  height: 0;
+  content: none;
+}
+
+.gov-kpi-cat-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.gov-kpi-cat-filter-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.gov-kpi-cat-filter-head strong {
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.gov-kpi-cat-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.gov-kpi-cat-tab {
+  border: 1.5px solid #cbd5e1;
+  background: #fff;
+  color: #475569;
+  border-radius: 999px;
+  padding: 0.32rem 0.75rem;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.gov-kpi-cat-tab:hover {
+  border-color: #00897b;
+  color: #00695c;
+}
+
+.gov-kpi-cat-tab.active {
+  background: var(--brand-gradient);
+  border-color: #00897b;
+  color: #fff;
+}
+
+.gov-kpi-cat-tab .cat-count {
+  margin-left: 0.35rem;
+  opacity: 0.85;
+  font-weight: 600;
+}
+
+.gov-kpi-itemwise-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin: 0 0 0.85rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  background: rgba(0, 191, 165, 0.08);
+  border: 1px solid rgba(0, 137, 123, 0.2);
+  font-size: 0.85rem;
+  color: #334155;
+}
+
+.gov-kpi-itemwise-hint p {
+  margin: 0;
+}
+
+.tender-stat.is-clickable {
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.tender-stat.is-clickable:hover {
+  box-shadow: 0 0 0 2px rgba(0, 137, 123, 0.35);
 }
 
 .kpi-detail .tender-stat em {
@@ -6329,7 +6449,7 @@ body:has(#authPage:not([style*="display: none"])) {
 }
 
 .pagination-btn.active {
-  background: var(--primary);
+  background: var(--brand-gradient);
   border-color: var(--primary);
   color: #fff;
 }
@@ -6943,12 +7063,23 @@ body:has(#authPage:not([style*="display: none"])) {
   color: #64748b;
 }
 
-.bid-article-panel .dvdms-detail-panel-head {
+.bid-article-panel .dvdms-detail-panel-head,
+.need-detail-panel .dvdms-detail-panel-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
   flex-wrap: wrap;
+}
+
+.need-detail-panel .dvdms-detail-panel-head .btn {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.35);
+  color: #fff;
+}
+
+.need-detail-panel .dvdms-detail-panel-head .btn:hover {
+  background: rgba(255, 255, 255, 0.28);
 }
 
 .bid-article-coverage-meta {

@@ -4,9 +4,9 @@ const CATEGORIES = ['All', 'Drugs', 'Equipment', 'Services', 'Consumables', 'Oth
 
 const GOV_WORKFLOW = [
   { id: 1, name: 'Need Identification', desc: 'Stock levels, patient load, disease burden and gap analysis are auto-populated from DVDMS / e-Aushadhi to determine requirements.', status: 'pending' },
-  { id: 2, name: 'Stock Check', desc: 'Verify existing warehouse stock, other locations, approved open POs, and redistributable inventory from DVDMS.', status: 'pending' },
-  { id: 3, name: 'Indent Raised', desc: 'AI/ML raises indents from DVDMS gaps; manual IND-01 only when SKU is absent from DVDMS.', status: 'pending' },
-  { id: 4, name: 'Demand Consolidation', desc: 'Stock Manager checks duplicates, consolidates district requirements for optimization.', status: 'pending' },
+  { id: 2, name: 'Stock Check', desc: 'Verify existing warehouse stock, other locations, approved open POs, and redistributable inventory.', status: 'pending' },
+  { id: 3, name: 'Indent Raised', desc: 'Review raised indent lines by facility, quantity, priority and status.', status: 'pending' },
+  { id: 4, name: 'Demand Consolidation', desc: 'Review consolidated district demand packages by category, period, and status.', status: 'pending' },
   { id: 5, name: 'PR & Budget Approval', desc: 'Purchase requisition with budget head allocation and administrative/financial sanction.', status: 'pending' },
   { id: 6, name: 'Tender Preparation', desc: 'System prepares NIT/RFP draft from prior stage data; division checkers upload consensus; final tender is issued.', status: 'pending' },
   { id: 7, name: 'Bid Evaluation', desc: 'System-assisted technical and financial bid evaluation; custom evaluation sheet generated for each tender.', status: 'pending' },
@@ -361,6 +361,7 @@ const PR_BUDGET_APPROVAL_API = {
       id: 'finance',
       name: 'Finance Wing',
       shortName: 'Finance',
+      category: 'Drugs',
       budgetHead: '2210-01-110-01',
       scheme: 'NHM — Essential Drugs',
       allocated: '₹6.40 Cr',
@@ -382,6 +383,7 @@ const PR_BUDGET_APPROVAL_API = {
       id: 'cmo',
       name: 'CMO / Administrative Office',
       shortName: 'Admin Sanction',
+      category: 'Drugs',
       budgetHead: 'AS-BPL-2026-Q2',
       scheme: 'District Administrative Sanction',
       allocated: '₹4.20 Cr',
@@ -414,6 +416,7 @@ const PR_BUDGET_APPROVAL_API = {
       id: 'nhm',
       name: 'NHM Programme Division',
       shortName: 'NHM',
+      category: 'Drugs',
       budgetHead: 'NHM-DRG-Q2-26',
       scheme: 'NHM Free Drug Initiative',
       allocated: '₹3.10 Cr',
@@ -446,6 +449,7 @@ const PR_BUDGET_APPROVAL_API = {
       id: 'stores',
       name: 'Central Stores / Warehouse',
       shortName: 'Stores',
+      category: 'Drugs',
       budgetHead: 'STR-OPT-2026',
       scheme: 'Stock optimization residual',
       allocated: '₹1.80 Cr',
@@ -466,6 +470,7 @@ const PR_BUDGET_APPROVAL_API = {
       id: 'medical',
       name: 'Medical / Specialty Indenting Dept.',
       shortName: 'Medical',
+      category: 'Drugs',
       budgetHead: 'MED-ONC-Q2',
       scheme: 'Specialty & oncology buffer',
       allocated: '₹2.25 Cr',
@@ -493,6 +498,69 @@ const PR_BUDGET_APPROVAL_API = {
         ],
         rawText: 'Partial approval Rs 2.00 Cr for critical oncology. Balance 0.25 Cr held till GMC patient load certificate received.'
       }
+    },
+    {
+      id: 'equip-fin',
+      name: 'Finance Wing — Equipment',
+      shortName: 'Finance (Eq)',
+      category: 'Equipment',
+      budgetHead: '2210-05-105-02',
+      scheme: 'Diagnostic Equipment Capex',
+      allocated: '₹3.50 Cr',
+      requested: '₹3.20 Cr',
+      available: '₹3.50 Cr',
+      status: 'Approved',
+      decisionBy: 'GM Finance',
+      decisionDate: '28-08-2026',
+      reason: 'Capex head has adequate balance for CT / imaging cluster under Q2 equipment plan.',
+      reasonSource: 'Sanction note (PDF)',
+      sectionWork: ['Capex concurrence', 'Budget head locking'],
+      documents: [
+        { id: 'DOC-EQF-011', name: 'Equipment Capex Concurrence.pdf', kind: 'PDF', uploadedBy: 'Finance Wing', uploadedOn: '28-08-2026', ocr: false }
+      ],
+      ocrExtract: null
+    },
+    {
+      id: 'cons-stores',
+      name: 'Central Stores — Consumables',
+      shortName: 'Stores (Con)',
+      category: 'Consumables',
+      budgetHead: 'CON-PPE-Q2',
+      scheme: 'PPE & linen buffer',
+      allocated: '₹0.85 Cr',
+      requested: '₹0.72 Cr',
+      available: '₹0.85 Cr',
+      status: 'Under Review',
+      decisionBy: 'Store Manager — Consumables',
+      decisionDate: '—',
+      reason: 'Awaiting glove sample acceptance before locking residual consumables budget.',
+      reasonSource: 'Department status remark (typed)',
+      sectionWork: ['PPE buffer confirmation', 'Sample acceptance'],
+      documents: [
+        { id: 'DOC-CON-019', name: 'Consumables Gap Sheet.pdf', kind: 'PDF', uploadedBy: 'Stores', uploadedOn: '01-09-2026', ocr: false }
+      ],
+      ocrExtract: null
+    },
+    {
+      id: 'srv-it',
+      name: 'IT / Digital Health Cell',
+      shortName: 'IT Services',
+      category: 'Services',
+      budgetHead: 'SRV-HMIS-Q2',
+      scheme: 'HMIS & telemedicine support',
+      allocated: '₹1.20 Cr',
+      requested: '₹1.05 Cr',
+      available: '₹1.20 Cr',
+      status: 'Approved',
+      decisionBy: 'GM — Digital Health',
+      decisionDate: '29-08-2026',
+      reason: 'Service budget cleared for HMIS upgrade milestones within sanctioned band.',
+      reasonSource: 'Sanction note (PDF)',
+      sectionWork: ['Service budget check', 'Milestone alignment'],
+      documents: [
+        { id: 'DOC-SRV-007', name: 'HMIS Budget Note.pdf', kind: 'PDF', uploadedBy: 'Digital Health', uploadedOn: '29-08-2026', ocr: false }
+      ],
+      ocrExtract: null
     }
   ]
 };
@@ -624,16 +692,16 @@ const BID_EVALUATION_DATA = {
     { id: 4, title: 'Evaluation outcome', detail: 'Qualified bidders, L1 recommendation and remarks are locked for contract stage.', status: 'Partial' }
   ],
   evaluations: [
-    { id: 'EVAL-0042', tenderId: 'TND-2026-MP-0042', title: 'Essential Medicines Rate Contract', state: 'Madhya Pradesh', division: 'Bhopal', category: 'Drugs', status: 'Evaluation complete', method: 'L1', bidsReceived: 8, techQualified: 6, l1Vendor: 'MediSupply India', l1Value: '₹11.9 Cr – ₹12.4 Cr', sheetNo: 'EVS-DRG-0042', evalDate: '28-08-2026', techScore: '92%', finScore: 'L1 ranked', remarks: 'All major EDL lines covered; two bidders disqualified on turnover.', bidders: [{ name: 'MediSupply India', tech: 'Qualified', rank: 'L1', quote: '₹11.95 Cr' }, { name: 'PharmaCare Distributors', tech: 'Qualified', rank: 'L2', quote: '₹12.18 Cr' }, { name: 'GenericMed Corp', tech: 'Qualified', rank: 'L3', quote: '₹12.40 Cr' }] },
-    { id: 'EVAL-0078', tenderId: 'TND-2026-MP-0078', title: 'Paracetamol 500mg Bulk', state: 'Madhya Pradesh', division: 'Indore', category: 'Drugs', status: 'Under evaluation', method: 'L1', bidsReceived: 10, techQualified: 8, l1Vendor: '— Pending', l1Value: '₹1.9 Cr – ₹2.3 Cr', sheetNo: 'EVS-DRG-0078', evalDate: '02-09-2026', techScore: 'In progress', finScore: 'Sealed', remarks: 'Technical opening done; commercial opening scheduled.', bidders: [{ name: 'Sunrise Pharma', tech: 'Qualified', rank: '—', quote: 'Sealed' }, { name: 'MediSupply India', tech: 'Qualified', rank: '—', quote: 'Sealed' }] },
-    { id: 'EVAL-0098', tenderId: 'TND-2026-MP-0098', title: 'Oncology Drug Supply 2026', state: 'Madhya Pradesh', division: 'Jabalpur', category: 'Drugs', status: 'Evaluation complete', method: 'QCBS', bidsReceived: 15, techQualified: 11, l1Vendor: 'OncoCare Pharma', l1Value: '₹7.9 Cr – ₹8.5 Cr', sheetNo: 'EVS-DRG-0098', evalDate: '02-08-2026', techScore: '88%', finScore: 'QCBS #1', remarks: 'QCBS weightage 70:30 applied; cold-chain proofs verified from scanned bids.', bidders: [{ name: 'OncoCare Pharma', tech: 'Qualified', rank: 'H1', quote: '₹8.05 Cr' }, { name: 'MediSupply India', tech: 'Qualified', rank: 'H2', quote: '₹8.22 Cr' }] },
-    { id: 'EVAL-0140', tenderId: 'TND-2026-MP-0140', title: 'Insulin & Diabetic Care Kit', state: 'Madhya Pradesh', division: 'Bhopal', category: 'Drugs', status: 'Technical screening', method: 'L1', bidsReceived: 7, techQualified: 4, l1Vendor: '— Pending', l1Value: '₹3.2 Cr – ₹3.9 Cr', sheetNo: 'EVS-DRG-0140', evalDate: '31-08-2026', techScore: 'Screening', finScore: 'Not opened', remarks: 'Three bids pending license clarity from uploaded documents.', bidders: [{ name: 'DiabetCare India', tech: 'Under review', rank: '—', quote: 'Not opened' }] },
-    { id: 'EVAL-0055', tenderId: 'TND-2026-MP-0055', title: 'CT Scanner Procurement', state: 'Madhya Pradesh', division: 'Bhopal', category: 'Equipment', status: 'Under evaluation', method: 'QCBS', bidsReceived: 4, techQualified: 3, l1Vendor: '— Pending', l1Value: '₹2.9 Cr – ₹3.5 Cr', sheetNo: 'EVS-EQP-0055', evalDate: '01-09-2026', techScore: '84%', finScore: 'Sealed', remarks: 'Custom evaluation sheet generated; demo scoring in progress.', bidders: [{ name: 'MedEquip Solutions', tech: 'Qualified', rank: '—', quote: 'Sealed' }, { name: 'ScanTech Systems', tech: 'Qualified', rank: '—', quote: 'Sealed' }] },
-    { id: 'EVAL-0072', tenderId: 'TND-2026-MP-0072', title: 'Surgical Instruments Kit', state: 'Madhya Pradesh', division: 'Gwalior', category: 'Equipment', status: 'Evaluation complete', method: 'L1', bidsReceived: 6, techQualified: 5, l1Vendor: 'Apex Surgical India', l1Value: '₹41 L – ₹48 L', sheetNo: 'EVS-EQP-0072', evalDate: '30-08-2026', techScore: '90%', finScore: 'L1 ranked', remarks: 'BIS marks verified from bid annexures.', bidders: [{ name: 'Apex Surgical India', tech: 'Qualified', rank: 'L1', quote: '₹43.2 L' }, { name: 'SurgiCare Ltd', tech: 'Qualified', rank: 'L2', quote: '₹44.8 L' }] },
-    { id: 'EVAL-0102', tenderId: 'TND-2026-MP-0102', title: 'Digital X-Ray Machines', state: 'Madhya Pradesh', division: 'Indore', category: 'Equipment', status: 'Evaluation complete', method: 'QCBS', bidsReceived: 9, techQualified: 7, l1Vendor: 'ImageMed Systems', l1Value: '₹2.6 Cr – ₹3.0 Cr', sheetNo: 'EVS-EQP-0102', evalDate: '15-07-2026', techScore: '91%', finScore: 'QCBS #1', remarks: 'AERB compliance confirmed from uploaded certificates.', bidders: [{ name: 'ImageMed Systems', tech: 'Qualified', rank: 'H1', quote: '₹2.72 Cr' }] },
-    { id: 'EVAL-0147', tenderId: 'TND-2026-MP-0147', title: 'Patient Monitoring Systems', state: 'Madhya Pradesh', division: 'Rewa', category: 'Equipment', status: 'Technical screening', method: 'L1', bidsReceived: 8, techQualified: 5, l1Vendor: '— Pending', l1Value: '₹95 L – ₹1.2 Cr', sheetNo: 'EVS-EQP-0147', evalDate: '29-08-2026', techScore: 'Screening', finScore: 'Not opened', remarks: 'Warranty clauses being matched to NIT from scanned proposals.', bidders: [{ name: 'CareMonitors Pvt', tech: 'Under review', rank: '—', quote: 'Not opened' }] },
-    { id: 'EVAL-0115', tenderId: 'TND-2026-MP-0115', title: 'Pathology Lab Reagents', state: 'Madhya Pradesh', division: 'Indore', category: 'Consumables', status: 'Under evaluation', method: 'L1', bidsReceived: 5, techQualified: 4, l1Vendor: '— Pending', l1Value: '₹50 L – ₹62 L', sheetNo: 'EVS-CON-0115', evalDate: '03-09-2026', techScore: '86%', finScore: 'Sealed', remarks: 'Shelf-life proofs extracted from bid packs.', bidders: [{ name: 'LabPro Reagents', tech: 'Qualified', rank: '—', quote: 'Sealed' }] },
-    { id: 'EVAL-0091', tenderId: 'TND-2026-MP-0091', title: 'Disposable Gloves Supply', state: 'Madhya Pradesh', division: 'Jabalpur', category: 'Consumables', status: 'Evaluation complete', method: 'L1', bidsReceived: 7, techQualified: 6, l1Vendor: 'SafeHands Consumables', l1Value: '₹25 L – ₹30 L', sheetNo: 'EVS-CON-0091', evalDate: '01-09-2026', techScore: '93%', finScore: 'L1 ranked', remarks: 'Sample test reports accepted.', bidders: [{ name: 'SafeHands Consumables', tech: 'Qualified', rank: 'L1', quote: '₹26.4 L' }] },
+    { id: 'EVAL-0042', tenderId: 'TND-2026-MP-0042', title: 'Essential Medicines Rate Contract', state: 'Madhya Pradesh', division: 'Bhopal', category: 'Drugs', status: 'Evaluation complete', method: 'L1', bidsReceived: 8, techQualified: 6, l1Vendor: 'MediSupply India', l1Value: '₹11.9 Cr – ₹12.4 Cr', sheetNo: 'EVS-DRG-0042', evalDate: '28-08-2026', techScore: '92%', finScore: 'L1 ranked', remarks: 'All major EDL lines covered; two bidders disqualified on turnover.', evaluatedItems: ['Paracetamol 500mg Tab', 'Amoxicillin 250mg Cap', 'IV Normal Saline 500ml', 'ORS Sachets', 'Metformin 500mg Tab'], bidders: [{ name: 'MediSupply India', tech: 'Qualified', rank: 'L1', quote: '₹11.95 Cr' }, { name: 'PharmaCare Distributors', tech: 'Qualified', rank: 'L2', quote: '₹12.18 Cr' }, { name: 'GenericMed Corp', tech: 'Qualified', rank: 'L3', quote: '₹12.40 Cr' }] },
+    { id: 'EVAL-0078', tenderId: 'TND-2026-MP-0078', title: 'Paracetamol 500mg Bulk', state: 'Madhya Pradesh', division: 'Indore', category: 'Drugs', status: 'Under evaluation', method: 'L1', bidsReceived: 10, techQualified: 8, l1Vendor: '— Pending', l1Value: '₹1.9 Cr – ₹2.3 Cr', sheetNo: 'EVS-DRG-0078', evalDate: '02-09-2026', techScore: 'In progress', finScore: 'Sealed', remarks: 'Technical opening done; commercial opening scheduled.', evaluatedItems: ['Paracetamol 500mg Tab'], bidders: [{ name: 'Sunrise Pharma', tech: 'Qualified', rank: '—', quote: 'Sealed' }, { name: 'MediSupply India', tech: 'Qualified', rank: '—', quote: 'Sealed' }] },
+    { id: 'EVAL-0098', tenderId: 'TND-2026-MP-0098', title: 'Oncology Drug Supply 2026', state: 'Madhya Pradesh', division: 'Jabalpur', category: 'Drugs', status: 'Evaluation complete', method: 'QCBS', bidsReceived: 15, techQualified: 11, l1Vendor: 'OncoCare Pharma', l1Value: '₹7.9 Cr – ₹8.5 Cr', sheetNo: 'EVS-DRG-0098', evalDate: '02-08-2026', techScore: '88%', finScore: 'QCBS #1', remarks: 'QCBS weightage 70:30 applied; cold-chain proofs verified from scanned bids.', evaluatedItems: ['Oncology Drug Pack', 'Insulin 40 IU', 'Ceftriaxone 1g Inj'], bidders: [{ name: 'OncoCare Pharma', tech: 'Qualified', rank: 'H1', quote: '₹8.05 Cr' }, { name: 'MediSupply India', tech: 'Qualified', rank: 'H2', quote: '₹8.22 Cr' }] },
+    { id: 'EVAL-0140', tenderId: 'TND-2026-MP-0140', title: 'Insulin & Diabetic Care Kit', state: 'Madhya Pradesh', division: 'Bhopal', category: 'Drugs', status: 'Technical screening', method: 'L1', bidsReceived: 7, techQualified: 4, l1Vendor: '— Pending', l1Value: '₹3.2 Cr – ₹3.9 Cr', sheetNo: 'EVS-DRG-0140', evalDate: '31-08-2026', techScore: 'Screening', finScore: 'Not opened', remarks: 'Three bids pending license clarity from uploaded documents.', evaluatedItems: ['Insulin 40 IU', 'Metformin 500mg Tab'], bidders: [{ name: 'DiabetCare India', tech: 'Under review', rank: '—', quote: 'Not opened' }] },
+    { id: 'EVAL-0055', tenderId: 'TND-2026-MP-0055', title: 'CT Scanner Procurement', state: 'Madhya Pradesh', division: 'Bhopal', category: 'Equipment', status: 'Under evaluation', method: 'QCBS', bidsReceived: 4, techQualified: 3, l1Vendor: '— Pending', l1Value: '₹2.9 Cr – ₹3.5 Cr', sheetNo: 'EVS-EQP-0055', evalDate: '01-09-2026', techScore: '84%', finScore: 'Sealed', remarks: 'Custom evaluation sheet generated; demo scoring in progress.', evaluatedItems: ['CT Scanner'], bidders: [{ name: 'MedEquip Solutions', tech: 'Qualified', rank: '—', quote: 'Sealed' }, { name: 'ScanTech Systems', tech: 'Qualified', rank: '—', quote: 'Sealed' }] },
+    { id: 'EVAL-0072', tenderId: 'TND-2026-MP-0072', title: 'Surgical Instruments Kit', state: 'Madhya Pradesh', division: 'Gwalior', category: 'Equipment', status: 'Evaluation complete', method: 'L1', bidsReceived: 6, techQualified: 5, l1Vendor: 'Apex Surgical India', l1Value: '₹41 L – ₹48 L', sheetNo: 'EVS-EQP-0072', evalDate: '30-08-2026', techScore: '90%', finScore: 'L1 ranked', remarks: 'BIS marks verified from bid annexures.', evaluatedItems: ['Surgical Instruments'], bidders: [{ name: 'Apex Surgical India', tech: 'Qualified', rank: 'L1', quote: '₹43.2 L' }, { name: 'SurgiCare Ltd', tech: 'Qualified', rank: 'L2', quote: '₹44.8 L' }] },
+    { id: 'EVAL-0102', tenderId: 'TND-2026-MP-0102', title: 'Digital X-Ray Machines', state: 'Madhya Pradesh', division: 'Indore', category: 'Equipment', status: 'Evaluation complete', method: 'QCBS', bidsReceived: 9, techQualified: 7, l1Vendor: 'ImageMed Systems', l1Value: '₹2.6 Cr – ₹3.0 Cr', sheetNo: 'EVS-EQP-0102', evalDate: '15-07-2026', techScore: '91%', finScore: 'QCBS #1', remarks: 'AERB compliance confirmed from uploaded certificates.', evaluatedItems: ['Digital X-Ray'], bidders: [{ name: 'ImageMed Systems', tech: 'Qualified', rank: 'H1', quote: '₹2.72 Cr' }] },
+    { id: 'EVAL-0147', tenderId: 'TND-2026-MP-0147', title: 'Patient Monitoring Systems', state: 'Madhya Pradesh', division: 'Rewa', category: 'Equipment', status: 'Technical screening', method: 'L1', bidsReceived: 8, techQualified: 5, l1Vendor: '— Pending', l1Value: '₹95 L – ₹1.2 Cr', sheetNo: 'EVS-EQP-0147', evalDate: '29-08-2026', techScore: 'Screening', finScore: 'Not opened', remarks: 'Warranty clauses being matched to NIT from scanned proposals.', evaluatedItems: ['Patient Monitors'], bidders: [{ name: 'CareMonitors Pvt', tech: 'Under review', rank: '—', quote: 'Not opened' }] },
+    { id: 'EVAL-0115', tenderId: 'TND-2026-MP-0115', title: 'Pathology Lab Reagents', state: 'Madhya Pradesh', division: 'Indore', category: 'Consumables', status: 'Under evaluation', method: 'L1', bidsReceived: 5, techQualified: 4, l1Vendor: '— Pending', l1Value: '₹50 L – ₹62 L', sheetNo: 'EVS-CON-0115', evalDate: '03-09-2026', techScore: '86%', finScore: 'Sealed', remarks: 'Shelf-life proofs extracted from bid packs.', evaluatedItems: ['Pathology Reagents'], bidders: [{ name: 'LabPro Reagents', tech: 'Qualified', rank: '—', quote: 'Sealed' }] },
+    { id: 'EVAL-0091', tenderId: 'TND-2026-MP-0091', title: 'Disposable Gloves Supply', state: 'Madhya Pradesh', division: 'Jabalpur', category: 'Consumables', status: 'Evaluation complete', method: 'L1', bidsReceived: 7, techQualified: 6, l1Vendor: 'SafeHands Consumables', l1Value: '₹25 L – ₹30 L', sheetNo: 'EVS-CON-0091', evalDate: '01-09-2026', techScore: '93%', finScore: 'L1 ranked', remarks: 'Sample test reports accepted.', evaluatedItems: ['Disposable Gloves', 'Surgical Masks'], bidders: [{ name: 'SafeHands Consumables', tech: 'Qualified', rank: 'L1', quote: '₹26.4 L' }] },
     { id: 'EVAL-0126', tenderId: 'TND-2026-MP-0126', title: 'Telemedicine Platform', state: 'Madhya Pradesh', division: 'Gwalior', category: 'Services', status: 'Under evaluation', method: 'QCBS', bidsReceived: 3, techQualified: 3, l1Vendor: '— Pending', l1Value: '₹85 L – ₹1.05 Cr', sheetNo: 'EVS-SRV-0126', evalDate: '28-08-2026', techScore: '80%', finScore: 'Sealed', remarks: 'Custom QCBS sheet generated for platform demo scoring.', bidders: [{ name: 'CloudCare Systems', tech: 'Qualified', rank: '—', quote: 'Sealed' }] },
     { id: 'EVAL-0085', tenderId: 'TND-2026-MP-0085', title: 'Ambulance Fleet Maintenance', state: 'Madhya Pradesh', division: 'Rewa', category: 'Others', status: 'Evaluation complete', method: 'L1', bidsReceived: 3, techQualified: 3, l1Vendor: 'MediTrans Logistics', l1Value: '₹29 L – ₹34 L', sheetNo: 'EVS-OTH-0085', evalDate: '25-08-2026', techScore: '87%', finScore: 'L1 ranked', remarks: 'Workshop coverage verified across Rewa blocks.', bidders: [{ name: 'MediTrans Logistics', tech: 'Qualified', rank: 'L1', quote: '₹30.5 L' }] }
   ]
@@ -803,13 +871,13 @@ const PAYMENT_STAGE_DATA = {
     { id: 3, title: 'Contract closure records', detail: 'Close payment cycle and update contract closure status.', status: 'Pending' }
   ],
   payments: [
-    { id: 'PAY-2026-0042', invoiceId: 'INV-2026-0042', poId: 'PO-2026-0042', tenderId: 'TND-2026-MP-0042', title: 'Essential Medicines Rate Contract', state: 'Madhya Pradesh', division: 'Bhopal', category: 'Drugs', status: 'Paid', vendor: 'MediSupply India', paymentDate: '28-09-2026', value: '₹1.92 Cr – ₹2.06 Cr', gross: '₹1.94 Cr – ₹2.08 Cr', ld: 'Nil', netPayable: '₹1.92 Cr – ₹2.06 Cr', mode: 'PFMS / NEFT', utr: 'UTR/SBI/2026/991204', dueDate: '04-11-2026', remarks: 'Paid within Net 45 from GRN.' },
-    { id: 'PAY-2026-0038', invoiceId: 'INV-2026-0038', poId: 'PO-2026-0038', tenderId: 'TND-2026-MP-0038', title: 'Hospital Linen Supply', state: 'Madhya Pradesh', division: 'Bhopal', category: 'Consumables', status: 'Paid', vendor: 'CleanCare Supplies', paymentDate: '20-09-2026', value: '₹26 L – ₹30 L', gross: '₹26 L – ₹30 L', ld: 'Nil', netPayable: '₹26 L – ₹30 L', mode: 'PFMS / NEFT', utr: 'UTR/HDFC/2026/441188', dueDate: '24-09-2026', remarks: 'Paid on Net 30 terms.' },
+    { id: 'PAY-2026-0042', invoiceId: 'INV-2026-0042', poId: 'PO-2026-0042', tenderId: 'TND-2026-MP-0042', title: 'Essential Medicines Rate Contract', state: 'Madhya Pradesh', division: 'Bhopal', category: 'Drugs', status: 'Paid', vendor: 'MediSupply India', paymentDate: '28-09-2026', value: '₹1.92 Cr – ₹2.06 Cr', gross: '₹1.94 Cr – ₹2.08 Cr', ld: 'Nil', netPayable: '₹1.92 Cr – ₹2.06 Cr', mode: 'PFMS / NEFT', utr: 'UTR/SBI/2026/991204', dueDate: '04-11-2026', remarks: 'Paid within Net 45 from GRN.', paidItems: ['Paracetamol 500mg Tab', 'Amoxicillin 250mg Cap', 'IV Normal Saline 500ml'] },
+    { id: 'PAY-2026-0038', invoiceId: 'INV-2026-0038', poId: 'PO-2026-0038', tenderId: 'TND-2026-MP-0038', title: 'Hospital Linen Supply', state: 'Madhya Pradesh', division: 'Bhopal', category: 'Consumables', status: 'Paid', vendor: 'CleanCare Supplies', paymentDate: '20-09-2026', value: '₹26 L – ₹30 L', gross: '₹26 L – ₹30 L', ld: 'Nil', netPayable: '₹26 L – ₹30 L', mode: 'PFMS / NEFT', utr: 'UTR/HDFC/2026/441188', dueDate: '24-09-2026', remarks: 'Paid on Net 30 terms.', paidItems: ['Hospital Linen'] },
     { id: 'PAY-2026-0161', invoiceId: 'INV-2026-0161', poId: 'PO-2026-0161', tenderId: 'TND-2026-MP-0161', title: 'Hospital Security Services', state: 'Madhya Pradesh', division: 'Bhopal', category: 'Services', status: 'In process', vendor: 'SecureHealth Services', paymentDate: '—', value: '₹5.4 L – ₹6.5 L', gross: '₹5.4 L – ₹6.5 L', ld: 'Nil', netPayable: '₹5.4 L – ₹6.5 L', mode: 'PFMS', utr: '— Pending', dueDate: '01-10-2026', date: '03-09-2026', remarks: 'Payment advice generated; treasury queue.' },
     { id: 'PAY-2026-0133', invoiceId: 'INV-2026-0133', poId: 'PO-2026-0133', tenderId: 'TND-2026-MP-0133', title: 'Waste Management Services', state: 'Madhya Pradesh', division: 'Indore', category: 'Others', status: 'Approved', vendor: 'GreenMed Waste', paymentDate: '—', value: '₹3.1 L – ₹3.8 L', gross: '₹3.1 L – ₹3.8 L', ld: 'Nil', netPayable: '₹3.1 L – ₹3.8 L', mode: 'PFMS', utr: '—', dueDate: '10-10-2026', date: '02-09-2026', remarks: 'Finance approved; awaiting release.' },
-    { id: 'PAY-2026-0102', invoiceId: 'INV-2026-0102', poId: 'PO-2026-0102', tenderId: 'TND-2026-MP-0102', title: 'Digital X-Ray Machines', state: 'Madhya Pradesh', division: 'Indore', category: 'Equipment', status: 'On hold', vendor: 'ImageMed Systems', paymentDate: '—', value: '₹2.6 Cr – ₹3.0 Cr', gross: '₹2.6 Cr – ₹3.0 Cr', ld: '—', netPayable: '—', mode: '—', utr: '—', dueDate: '—', date: '08-09-2026', remarks: 'Held until GRN acceptance certificate.' },
-    { id: 'PAY-2026-0091', invoiceId: 'INV-2026-0091', poId: 'PO-2026-0091', tenderId: 'TND-2026-MP-0091', title: 'Disposable Gloves Supply', state: 'Madhya Pradesh', division: 'Jabalpur', category: 'Consumables', status: 'On hold', vendor: 'SafeHands Consumables', paymentDate: '—', value: '₹25 L – ₹30 L', gross: '₹25 L – ₹30 L', ld: '—', netPayable: '—', mode: '—', utr: '—', dueDate: '—', date: '02-09-2026', remarks: 'Invoice mismatch — revise before payment.' },
-    { id: 'PAY-2026-0042B', invoiceId: 'INV-2026-0042B', poId: 'PO-2026-0042', tenderId: 'TND-2026-MP-0042', title: 'Essential Medicines (held lot)', state: 'Madhya Pradesh', division: 'Bhopal', category: 'Drugs', status: 'Rejected', vendor: 'MediSupply India', paymentDate: '—', value: '₹48 L – ₹55 L', gross: '₹48 L – ₹55 L', ld: 'N/A', netPayable: 'Nil', mode: '—', utr: '—', dueDate: '—', date: '29-08-2026', rejectionReason: 'GRN-2026-0042B failed QA — shelf-life below NIT threshold. Invoice INV-2026-0042B was blocked and no payment was released for this held lot.', remarks: 'No payment — GRN and invoice rejected.' },
+    { id: 'PAY-2026-0102', invoiceId: 'INV-2026-0102', poId: 'PO-2026-0102', tenderId: 'TND-2026-MP-0102', title: 'Digital X-Ray Machines', state: 'Madhya Pradesh', division: 'Indore', category: 'Equipment', status: 'On hold', vendor: 'ImageMed Systems', paymentDate: '—', value: '₹2.6 Cr – ₹3.0 Cr', gross: '₹2.6 Cr – ₹3.0 Cr', ld: '—', netPayable: '—', mode: '—', utr: '—', dueDate: '—', date: '08-09-2026', remarks: 'Held until GRN acceptance certificate.', paidItems: ['Digital X-Ray'] },
+    { id: 'PAY-2026-0091', invoiceId: 'INV-2026-0091', poId: 'PO-2026-0091', tenderId: 'TND-2026-MP-0091', title: 'Disposable Gloves Supply', state: 'Madhya Pradesh', division: 'Jabalpur', category: 'Consumables', status: 'On hold', vendor: 'SafeHands Consumables', paymentDate: '—', value: '₹25 L – ₹30 L', gross: '₹25 L – ₹30 L', ld: '—', netPayable: '—', mode: '—', utr: '—', dueDate: '—', date: '02-09-2026', remarks: 'Invoice mismatch — revise before payment.', paidItems: ['Disposable Gloves'] },
+    { id: 'PAY-2026-0042B', invoiceId: 'INV-2026-0042B', poId: 'PO-2026-0042', tenderId: 'TND-2026-MP-0042', title: 'Essential Medicines (held lot)', state: 'Madhya Pradesh', division: 'Bhopal', category: 'Drugs', status: 'Rejected', vendor: 'MediSupply India', paymentDate: '—', value: '₹48 L – ₹55 L', gross: '₹48 L – ₹55 L', ld: 'N/A', netPayable: 'Nil', mode: '—', utr: '—', dueDate: '—', date: '29-08-2026', rejectionReason: 'GRN-2026-0042B failed QA — shelf-life below NIT threshold. Invoice INV-2026-0042B was blocked and no payment was released for this held lot.', remarks: 'No payment — GRN and invoice rejected.', paidItems: ['Essential Medicines RC Pack'] },
     { id: 'PAY-2026-0098', invoiceId: 'INV-2026-0098', poId: 'PO-2026-0098', tenderId: 'TND-2026-MP-0098', title: 'Oncology Drug Supply 2026', state: 'Madhya Pradesh', division: 'Jabalpur', category: 'Drugs', status: 'Awaiting invoice', vendor: 'OncoCare Pharma', paymentDate: '—', value: '₹7.9 Cr – ₹8.5 Cr', gross: '—', ld: '—', netPayable: '—', mode: '—', utr: '—', dueDate: '—', date: '03-09-2026', remarks: 'Upstream stages incomplete.' },
     { id: 'PAY-2026-0072', invoiceId: 'INV-2026-0072', poId: 'PO-2026-0072', tenderId: 'TND-2026-MP-0072', title: 'Surgical Instruments Kit', state: 'Madhya Pradesh', division: 'Gwalior', category: 'Equipment', status: 'Awaiting invoice', vendor: 'Apex Surgical India', paymentDate: '—', value: '₹41 L – ₹48 L', gross: '—', ld: '—', netPayable: '—', mode: '—', utr: '—', dueDate: '—', date: '01-09-2026', remarks: 'Awaiting contract / GRN / invoice.' },
     { id: 'PAY-2026-0085', invoiceId: 'INV-2026-0085', poId: 'PO-2026-0085', tenderId: 'TND-2026-MP-0085', title: 'Ambulance Fleet Maintenance', state: 'Madhya Pradesh', division: 'Rewa', category: 'Others', status: 'Awaiting invoice', vendor: 'MediTrans Logistics', paymentDate: '—', value: '₹29 L – ₹34 L', gross: '—', ld: '—', netPayable: '—', mode: '—', utr: '—', dueDate: '—', date: '28-08-2026', remarks: 'No payment queue entry yet.' },
