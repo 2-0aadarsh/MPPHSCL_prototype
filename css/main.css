@@ -400,6 +400,12 @@ body:has(#authPage:not([style*="display: none"])) {
   pointer-events: none;
 }
 
+/* Hide browser-native password reveal (Edge/IE) ? we use .auth-toggle-pw */
+.auth-field input[type="password"]::-ms-reveal,
+.auth-field input[type="password"]::-ms-clear {
+  display: none;
+}
+
 .auth-toggle-pw {
   position: absolute;
   right: 0.7rem;
@@ -409,6 +415,7 @@ body:has(#authPage:not([style*="display: none"])) {
   cursor: pointer;
   padding: 0.3rem;
   font-size: 0.88rem;
+  z-index: 1;
 }
 .auth-toggle-pw:hover { color: #086FA6; }
 
@@ -2565,6 +2572,11 @@ body:has(#authPage:not([style*="display: none"])) {
   line-height: 1.45;
 }
 
+.contracts-page .indent-mode-banner p.indent-mode-banner-copy {
+  max-width: none;
+  white-space: nowrap;
+}
+
 .indent-mode-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2744,6 +2756,9 @@ body:has(#authPage:not([style*="display: none"])) {
   }
   .indent-mode-banner {
     flex-direction: column;
+  }
+  .contracts-page .indent-mode-banner p.indent-mode-banner-copy {
+    white-space: normal;
   }
 }
 
@@ -6547,6 +6562,215 @@ body:has(#authPage:not([style*="display: none"])) {
 
 .bid-dvdms-stage .bid-dvdms-table-wrap {
   margin-top: 0.25rem;
+  overflow: visible;
+}
+
+.bid-dvdms-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  border-top: 1px solid var(--border);
+}
+
+.bid-dvdms-stage .bid-sync-table,
+.bid-dvdms-stage .award-sync-table,
+.bid-dvdms-stage .delivery-sync-table {
+  table-layout: auto;
+  width: 100%;
+  min-width: 1180px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.bid-dvdms-stage .delivery-sync-table {
+  min-width: 0;
+}
+
+.bid-dvdms-stage .bid-sync-table th,
+.bid-dvdms-stage .bid-sync-table td,
+.bid-dvdms-stage .award-sync-table th,
+.bid-dvdms-stage .award-sync-table td,
+.bid-dvdms-stage .delivery-sync-table th,
+.bid-dvdms-stage .delivery-sync-table td {
+  vertical-align: middle;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  word-break: normal;
+  padding: 0.85rem 1rem;
+  line-height: 1.35;
+}
+
+.bid-dvdms-stage .bid-sync-table th,
+.bid-dvdms-stage .award-sync-table th,
+.bid-dvdms-stage .delivery-sync-table th {
+  white-space: nowrap;
+}
+
+.bid-dvdms-stage .cell-nowrap,
+.bid-dvdms-stage .cell-id,
+.bid-dvdms-stage .cell-category,
+.bid-dvdms-stage .cell-status,
+.bid-dvdms-stage .cell-award-value,
+.bid-dvdms-stage .cell-emd {
+  white-space: nowrap;
+}
+
+.bid-dvdms-stage .cell-tender {
+  min-width: 14rem;
+  max-width: 18rem;
+  white-space: normal;
+}
+
+.bid-dvdms-stage .cell-tender .table-sub {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  display: block;
+  margin-top: 0.2rem;
+  line-height: 1.35;
+}
+
+.bid-dvdms-stage .cell-category {
+  min-width: 7.5rem;
+}
+
+.bid-dvdms-stage .cell-emd {
+  min-width: 9.5rem;
+}
+
+.bid-dvdms-stage .cell-status {
+  min-width: 8.5rem;
+}
+
+.bid-dvdms-stage .cell-award-value {
+  min-width: 7.5rem;
+}
+
+.bid-dvdms-stage .status-stack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.28rem;
+}
+
+.bid-dvdms-stage .status-meta {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+.bid-dvdms-stage .badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  max-width: none;
+  width: max-content;
+  min-height: 1.7rem;
+  padding: 0.28rem 0.7rem;
+  border-radius: 999px;
+  border-width: 1px;
+  border-style: solid;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  box-shadow: none;
+}
+
+.bid-dvdms-stage .badge-success {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #6ee7b7;
+}
+
+.bid-dvdms-stage .badge-warning {
+  background: #fff7ed;
+  color: #c2410c;
+  border-color: #fdba74;
+}
+
+.bid-dvdms-stage .badge-info {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #93c5fd;
+}
+
+.bid-dvdms-stage .badge-danger {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+
+.bid-dvdms-stage .badge-muted {
+  background: #f8fafc;
+  color: #334155;
+  border-color: #cbd5e1;
+}
+
+.bid-dvdms-stage .masked-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  white-space: nowrap;
+  max-width: none;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #0f172a;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  box-sizing: border-box;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.table-filter-empty-row td {
+  padding: 0 !important;
+  border-top: 1px solid var(--border);
+  cursor: default;
+  white-space: normal !important;
+}
+
+.table-filter-empty-row:hover td {
+  background: transparent !important;
+}
+
+.table-filter-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 1.75rem 1rem;
+  text-align: center;
+  color: #64748b;
+  font-size: 0.9rem;
+  background: #f8fafb;
+}
+
+.table-filter-empty i {
+  font-size: 1.15rem;
+  color: #94a3b8;
+}
+
+.table-filter-empty p {
+  margin: 0;
+  max-width: 42ch;
+  line-height: 1.45;
+}
+
+.award-records-table-wrap {
+  min-height: 12rem;
 }
 
 .bid-dvdms-stage .table-header {
@@ -6557,29 +6781,142 @@ body:has(#authPage:not([style*="display: none"])) {
   flex-wrap: wrap;
 }
 
+.bid-dvdms-stage .table-header.bid-records-header {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
 .bid-dvdms-stage .bid-records-header h3 {
   display: flex;
   align-items: center;
   gap: 0.55rem;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
-.bid-dvdms-stage .bid-records-category-filter {
-  display: flex;
+/* Category filter ? fixed width so label changes don't shift the header */
+.bid-records-header {
+  gap: 0.75rem;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 0.55rem;
 }
 
-.bid-dvdms-stage .bid-records-category-label {
+.bid-records-header > h3 {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.bid-records-header-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  flex: 0 0 auto;
+}
+
+.vendor-invoice-stage-head {
+  margin-bottom: 0.35rem;
+}
+
+.bid-records-category-filter {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0.3rem;
+  flex: 0 0 13.5rem;
+  width: 13.5rem;
+  min-width: 13.5rem;
+  max-width: 13.5rem;
+}
+
+.bid-records-category-label {
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-secondary);
+  line-height: 1.2;
 }
 
-.bid-dvdms-stage .bid-records-category-filter .custom-select--inline {
-  min-width: 10.5rem;
+.bid-records-category-filter .custom-select,
+.bid-records-category-filter .custom-select--inline {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.bid-records-category-filter .custom-select-trigger {
+  width: 100%;
+  min-height: 2.35rem;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.85rem;
+  box-sizing: border-box;
+}
+
+.bid-records-category-filter .custom-select-value {
+  display: block;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bid-records-category-filter .custom-select-menu {
+  left: 0;
+  right: auto;
+  width: 100%;
+  min-width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto;
+  z-index: 80;
+}
+
+.bid-records-category-filter .custom-select-option {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 2rem;
+  position: relative;
+}
+
+.bid-records-category-filter .custom-select-option.selected::after {
+  float: none;
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Let open category menus escape the clipped table card */
+.data-table-wrap:has(.bid-records-category-filter .custom-select.open) {
+  overflow: visible;
+}
+
+@media (max-width: 720px) {
+  .bid-records-header {
+    flex-wrap: wrap;
+  }
+
+  .bid-records-header-actions {
+    flex: 0 0 100%;
+    width: 100%;
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+
+  .bid-records-header-actions .btn {
+    width: 100%;
+  }
+
+  .bid-records-category-filter {
+    flex: 0 0 100%;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+  }
 }
 
 .bid-dvdms-stage .data-table td .table-sub {
@@ -6622,10 +6959,14 @@ body:has(#authPage:not([style*="display: none"])) {
 .bid-article-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.85rem 1.25rem;
-  padding: 0.65rem 0.9rem;
-  background: #f8fafb;
-  border-bottom: 1px solid #e5e8ec;
+  align-items: center;
+  gap: 0.75rem 1.15rem;
+  flex: 1 1 16rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
   font-size: 0.8rem;
   color: #585c5e;
 }
@@ -6637,12 +6978,131 @@ body:has(#authPage:not([style*="display: none"])) {
 .bid-article-legend .fa-circle-check { color: #16a34a; }
 .bid-article-legend .fa-circle-minus { color: #94a3b8; }
 
+.bid-article-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem 1.25rem;
+  flex-wrap: wrap;
+  padding: 0.7rem 0.95rem;
+  background: #f8fafb;
+  border-bottom: 1px solid #e5e8ec;
+  position: relative;
+  z-index: 5;
+}
+
+.article-coverage-filter {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.55rem;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.article-coverage-filter-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.article-coverage-filter .custom-select,
+.article-coverage-filter .custom-select--inline {
+  width: 11.5rem;
+  min-width: 11.5rem;
+  max-width: 11.5rem;
+}
+
+.article-coverage-filter .custom-select-trigger {
+  width: 100%;
+  min-height: 2.2rem;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.84rem;
+  box-sizing: border-box;
+  background: #fff;
+}
+
+.article-coverage-filter .custom-select-value {
+  display: block;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.article-coverage-filter .custom-select-menu {
+  left: auto;
+  right: 0;
+  width: 100%;
+  min-width: 100%;
+  max-width: 14rem;
+  z-index: 90;
+}
+
+.bid-article-panel:has(.article-coverage-filter .custom-select.open) {
+  overflow: visible;
+}
+
+@media (max-width: 720px) {
+  .bid-article-toolbar {
+    align-items: stretch;
+  }
+
+  .article-coverage-filter {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .article-coverage-filter .custom-select,
+  .article-coverage-filter .custom-select--inline {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+  }
+}
+
 .bid-article-table-wrap {
   margin: 0;
   border: none;
   border-radius: 0;
   max-height: 22rem;
   overflow: auto;
+}
+
+.bid-article-table-wrap[hidden] {
+  display: none !important;
+}
+
+.bid-article-filter-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 1.75rem 1rem;
+  color: #64748b;
+  font-size: 0.9rem;
+  text-align: center;
+  background: #f8fafb;
+}
+
+.bid-article-filter-empty[hidden] {
+  display: none !important;
+}
+
+.bid-article-filter-empty i {
+  font-size: 1.25rem;
+  color: #94a3b8;
+}
+
+.bid-article-filter-empty p {
+  margin: 0;
 }
 
 .bid-article-table thead th {
@@ -6857,6 +7317,41 @@ body:has(#authPage:not([style*="display: none"])) {
   font-size: 0.88rem;
   line-height: 1.55;
   color: #585c5e;
+}
+
+.dvdms-detail-rejection {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+  padding: 0.9rem 1rem;
+  border-radius: 10px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
+.dvdms-detail-rejection > i {
+  margin-top: 0.15rem;
+  color: #dc2626;
+  font-size: 1.05rem;
+}
+
+.dvdms-detail-rejection strong {
+  display: block;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 0.25rem;
+  color: #b91c1c;
+}
+
+.dvdms-detail-rejection p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  font-weight: 600;
+  color: #7f1d1d;
 }
 
 .bid-dvdms-stage .need-api-banner {
@@ -7142,6 +7637,15 @@ body:has(#authPage:not([style*="display: none"])) {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
+}
+
+.payment-summary-grid--detail {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.payment-track-actions {
+  display: flex;
+  justify-content: flex-start;
 }
 
 .payment-summary-card {
@@ -8565,6 +9069,7 @@ tr.is-active-contract-row td {
 
 @media (max-width: 720px) {
   .payment-summary-grid,
+  .payment-summary-grid--detail,
   .label-grid,
   .inline-upload-grid,
   .profile-readonly-grid {
@@ -8618,7 +9123,7 @@ tr.is-active-contract-row td {
 .wf-period-compact-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 0.75rem;
   flex-wrap: wrap;
 }
@@ -8628,6 +9133,9 @@ tr.is-active-contract-row td {
 }
 
 .bid-dvdms-table-wrap .wf-period-filter--compact,
+.bids-page .wf-period-filter--compact,
+.contracts-page .wf-period-filter--compact,
+.delivery-page .wf-period-filter--compact,
 .vendor-cm-register .wf-period-filter--compact,
 .vendor-invoice-exec-table .wf-period-filter--compact,
 .vendor-payment-exec-table .wf-period-filter--compact,
@@ -8640,8 +9148,7 @@ tr.is-active-contract-row td {
 }
 
 .vendor-cm-register-head .bid-records-category-filter {
-  flex-shrink: 0;
-  margin-top: 0.35rem;
+  margin-top: 0;
 }
 
 .vendor-cm-register-head h3 .meta-chip {
@@ -8878,6 +9385,181 @@ tr.is-active-contract-row td {
 .sla-notify-log ul { margin: 0; padding-left: 1.1rem; color: #475569; font-size: 0.85rem; }
 .sla-notify-log li { margin-bottom: 0.35rem; }
 
+.custom-select.is-locked {
+  pointer-events: none;
+  opacity: 0.72;
+}
+.custom-select.is-locked .custom-select-trigger {
+  cursor: not-allowed;
+  background: #f8fafc;
+}
+
+.approval-letter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+}
+.approval-letter-actions .btn[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.approval-letter-file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.approval-letter-file-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  color: #0f172a;
+  font-weight: 600;
+}
+.btn-link.approval-letter-show-link {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: #0d7490;
+  font: inherit;
+  font-weight: 650;
+  font-size: 0.92rem;
+  padding: 0.35rem 0.15rem;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.btn-link.approval-letter-show-link:hover {
+  color: #0a5f75;
+}
+.approval-letter-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+.approval-letter-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.15rem 0.1rem 0.35rem;
+}
+.approval-letter-toolbar strong {
+  display: block;
+  color: #0f172a;
+  font-size: 0.98rem;
+}
+.approval-letter-toolbar span {
+  display: block;
+  margin-top: 0.15rem;
+  color: #64748b;
+  font-size: 0.82rem;
+}
+.approval-letter-sheet {
+  background: #fff;
+  border: 1px solid #dbe3ee;
+  border-radius: 12px;
+  padding: 1.35rem 1.45rem 1.2rem;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+  color: #0f172a;
+  line-height: 1.55;
+}
+.approval-letter-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 2px solid #0f4c6d;
+}
+.approval-letter-brand {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #0f4c6d;
+}
+.approval-letter-brand-sub,
+.approval-letter-office {
+  margin: 0.15rem 0 0;
+  color: #475569;
+  font-size: 0.84rem;
+}
+.approval-letter-docmeta {
+  text-align: right;
+  font-size: 0.84rem;
+  color: #334155;
+}
+.approval-letter-docmeta p { margin: 0.25rem 0 0; }
+.approval-letter-title {
+  margin: 1rem 0 0.85rem;
+  text-align: center;
+  font-size: 1.05rem;
+  font-weight: 750;
+  color: #0f172a;
+}
+.approval-letter-to,
+.approval-letter-subject {
+  margin: 0 0 0.75rem;
+}
+.approval-letter-facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+  margin: 0.9rem 0 1rem;
+}
+.approval-letter-facts > div {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.65rem 0.75rem;
+}
+.approval-letter-facts > div.is-wide { grid-column: 1 / -1; }
+.approval-letter-facts span {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-bottom: 0.2rem;
+}
+.approval-letter-facts strong {
+  font-size: 0.92rem;
+  color: #0f172a;
+}
+.approval-letter-sign {
+  margin-top: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.approval-letter-sign span {
+  color: #64748b;
+  font-size: 0.84rem;
+}
+.approval-letter-foot {
+  margin-top: 1.25rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed #cbd5e1;
+  font-size: 0.78rem;
+  color: #64748b;
+}
+@media (max-width: 720px) {
+  .approval-letter-head,
+  .approval-letter-toolbar,
+  .approval-letter-facts {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+  .approval-letter-docmeta { text-align: left; }
+  .approval-letter-facts > div.is-wide { grid-column: auto; }
+}
+
 /* ===== Empanelment fee (Vendor Stage 1) ===== */
 .empanel-fee-block {
   margin-top: 1.25rem;
@@ -8984,7 +9666,7 @@ tr.is-active-contract-row td {
 /* Vendor Document Repository */
 .vendor-repository .repo-filters {
   display: grid;
-  grid-template-columns: minmax(140px, 180px) minmax(160px, 220px) minmax(220px, 1fr);
+  grid-template-columns: minmax(200px, 280px) minmax(160px, 220px) minmax(220px, 1fr);
   gap: 0.85rem 1rem;
   align-items: end;
   margin: 0.85rem 0 0.25rem;
@@ -9009,11 +9691,99 @@ tr.is-active-contract-row td {
   color: #0f172a;
   background: #fff;
 }
+.vendor-repository .repo-filter-group .custom-select {
+  width: 100%;
+}
+.vendor-repository .repo-filter-group .custom-select-trigger {
+  width: 100%;
+  min-height: 2.45rem;
+}
 .vendor-repository .repo-native-select:focus,
 .vendor-repository #repoSearchInput:focus {
   outline: none;
   border-color: #0d9488;
   box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.12);
+}
+
+.vendor-report-detail-table {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: visible;
+  background: #fff;
+}
+.vendor-report-detail-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem 1.25rem;
+  flex-wrap: wrap;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: #f8fafc;
+  border-radius: 12px 12px 0 0;
+}
+.vendor-report-detail-bar-lead {
+  margin: 0;
+  flex: 1 1 12rem;
+  min-width: 0;
+  color: #64748b;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+.vendor-report-detail-filter {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+.vendor-report-detail-filter-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+  white-space: nowrap;
+}
+.vendor-report-detail-filter .custom-select,
+.vendor-report-detail-filter .custom-select--inline {
+  width: 11.75rem;
+  min-width: 11.75rem;
+  max-width: 11.75rem;
+}
+.vendor-report-detail-filter .custom-select-trigger {
+  min-height: 2.15rem;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.84rem;
+}
+.vendor-report-detail-filter .custom-select-menu {
+  z-index: 90;
+}
+.vendor-report-detail-table > .kpi-detail-table--scroll {
+  border-radius: 0 0 12px 12px;
+  overflow-x: auto;
+  max-width: 100%;
+}
+.data-table--vendor-report {
+  min-width: 960px;
+  table-layout: auto;
+}
+.data-table--vendor-report .cell-title {
+  white-space: normal;
+  min-width: 12rem;
+  max-width: 18rem;
+}
+.data-table--vendor-report .cell-status {
+  white-space: nowrap;
+  min-width: 9rem;
+}
+.data-table--vendor-report .cell-id {
+  white-space: nowrap;
+  min-width: 9.5rem;
+}
+.vendor-report-detail-modal .kpi-detail-table--scroll {
+  overflow-x: auto;
+  max-width: 100%;
 }
 @media (max-width: 900px) {
   .vendor-repository .repo-filters {

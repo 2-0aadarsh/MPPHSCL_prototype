@@ -25,7 +25,8 @@ const contractsListState = {
   page: 1,
   year: 'all',
   viewBy: 'quarter',
-  period: 'all'
+  period: 'all',
+  category: 'all'
 };
 
 /** Resource Manager — Contract Management hub */
@@ -50,7 +51,8 @@ const deliveryListState = {
   page: 1,
   year: 'all',
   viewBy: 'quarter',
-  period: 'all'
+  period: 'all',
+  category: 'all'
 };
 
 /** Vendor Stage 8 — Invoice Submission table filters + pagination */
@@ -69,6 +71,13 @@ const vendorPaymentExecState = {
   viewBy: 'quarter',
   period: 'all',
   category: 'all'
+};
+
+/** Vendor Stage 9 — payment records sync banner (Delivery-style) */
+const vendorPaymentSyncState = {
+  status: 'idle',
+  lastSynced: '—',
+  fetchCount: 0
 };
 
 /** Vendor Stage 7 — Delivery table filters + pagination */
@@ -109,15 +118,26 @@ const tendersListState = {
   page: 1,
   year: 'all',
   viewBy: 'quarter',
-  period: 'all'
+  period: 'all',
+  category: 'all'
 };
+
+/** Vendor dashboard — Tender Details table category filter */
+let dashboardTenderCategory = 'all';
 
 /** Bid Submission — Year / Quarter / Month + pagination */
 const bidsListState = {
   page: 1,
   year: 'all',
   viewBy: 'quarter',
-  period: 'all'
+  period: 'all',
+  category: 'all'
+};
+
+/** Clarifications list — category filter + pagination */
+const clarificationsListState = {
+  page: 1,
+  category: 'all'
 };
 
 /** Prototype "today" — used for deadline countdown (DD-MM-YYYY: 03-09-2026) */
@@ -128,11 +148,21 @@ const VENDOR_LIFECYCLE_STORAGE_PREFIX = 'mph_vendor_lifecycle_v1_';
 
 const EMPANELMENT_FEE_AMOUNT = '₹25,000';
 
+const EMPANELMENT_PAYEE = {
+  name: 'MPPHSCL Empanelment Fee Account',
+  bank: 'State Bank of India',
+  account: '3892018475620',
+  ifsc: 'SBIN0000456',
+  branch: 'Arera Colony, Bhopal',
+  remark: 'Empanelment fee — quote GSTIN in remittance'
+};
+
 function defaultEmpanelmentState(submitted = false) {
   return {
     amount: EMPANELMENT_FEE_AMOUNT,
     mode: submitted ? 'online' : null,
     status: submitted ? 'submitted' : 'pending',
+    source: submitted ? 'synced' : 'manual',
     online: {
       method: 'NEFT',
       utr: submitted ? 'SBIN928471036482' : '',
@@ -147,10 +177,314 @@ function defaultEmpanelmentState(submitted = false) {
   };
 }
 
+function lockSyncedRegistrationSelects() {
+  if (!(currentRole === 'vendor' && currentWorkflowStep === 1 && isVendorRegistrationSynced())) return;
+  ['regCategory', 'regDistrict', 'regState'].forEach(id => {
+    const wrap = document.querySelector(`.custom-select[data-select-id="${id}"]`);
+    if (!wrap) return;
+    wrap.classList.add('is-locked');
+    wrap.setAttribute('aria-disabled', 'true');
+    const trigger = wrap.querySelector('.custom-select-trigger');
+    if (trigger) trigger.disabled = true;
+  });
+}
+
+function ensureEmpanelmentState() {
+  if (!vendorStageState.empanelment) {
+    vendorStageState.empanelment = defaultEmpanelmentState(
+      isVendorRegistrationSynced() || !!vendorStageState.completed?.[1]
+    );
+  }
+  return vendorStageState.empanelment;
+}
+
+function isVendorRegistrationSynced() {
+  if (vendorStageState.registrationSource === 'synced') return true;
+  if (vendorStageState.registrationSource === 'manual') return false;
+  return isSeededDemoVendor();
+}
+
+/** Pending only when fee / payment proof is absent; otherwise Submitted. */
+function isEmpanelmentRecordPresent(e = ensureEmpanelmentState()) {
+  if (!e) return false;
+  if (e.status === 'submitted') return true;
+  if (e.mode === 'online' && e.online?.utr && e.online?.paidOn) return true;
+  if (e.mode === 'offline' && e.offline?.fileName) return true;
+  return false;
+}
+
+function syncEmpanelmentStatusFromPresence() {
+  const e = ensureEmpanelmentState();
+  e.status = isEmpanelmentRecordPresent(e) ? 'submitted' : 'pending';
+  return e;
+}
+
+function isEmpanelmentSubmitted() {
+  return syncEmpanelmentStatusFromPresence().status === 'submitted';
+}
+
+function renderEmpanelmentFeeBlock(canEdit) {
+  const e = syncEmpanelmentStatusFromPresence();
+  const synced = isVendorRegistrationSynced();
+  const submitted = e.status === 'submitted';
+  const statusBadge = submitted
+    ? '<span class="badge badge-success">Submitted</span>'
+    : '<span class="badge badge-warning">Pending</span>';
+  const mode = e.mode;
+  const lock = !canEdit || submitted || synced;
+
+  const modePicker = lock
+    ? `<div class="empanel-mode-readonly"><strong>${
+        mode === 'online' ? 'Online (NEFT / RTGS)'
+          : mode === 'offline' ? 'Offline (document upload)'
+            : synced && !submitted ? 'Not received in system'
+              : '—'
+      }</strong></div>`
+    : `<div class="empanel-mode-cards" role="radiogroup" aria-label="Empanelment payment mode">
+        <button type="button" class="empanel-mode-card${mode === 'online' ? ' is-active' : ''}" onclick="setEmpanelmentMode('online')">
+          <i class="fa-solid fa-building-columns"></i>
+          <strong>Online</strong>
+          <span>Pay via NEFT / RTGS</span>
+        </button>
+        <button type="button" class="empanel-mode-card${mode === 'offline' ? ' is-active' : ''}" onclick="setEmpanelmentMode('offline')">
+          <i class="fa-solid fa-file-arrow-up"></i>
+          <strong>Offline</strong>
+          <span>Upload payment proof</span>
+        </button>
+      </div>`;
+
+  let summary = '';
+  if (submitted && mode === 'online') {
+    const o = e.online || {};
+    summary = `<div class="empanel-submitted-summary">
+      <p><i class="fa-solid fa-circle-check"></i> Online <strong>${escapeHtmlLite(o.method || 'NEFT')}</strong> recorded · UTR <strong>${escapeHtmlLite(o.utr || '—')}</strong> · ${escapeHtmlLite(o.paidOn || '—')}${synced ? ' · Loaded with registration' : ''}</p>
+    </div>`;
+  } else if (submitted && mode === 'offline') {
+    const f = e.offline || {};
+    summary = `<div class="empanel-submitted-summary">
+      <p><i class="fa-solid fa-circle-check"></i> Offline proof <strong>${escapeHtmlLite(f.fileName || '—')}</strong>${f.receiptNo ? ` · Receipt ${escapeHtmlLite(f.receiptNo)}` : ''} · ${escapeHtmlLite(f.uploadedOn || '—')}</p>
+    </div>`;
+  } else if (synced && !submitted) {
+    summary = `<p class="empanel-panel-lead empanel-panel-lead--hint"><i class="fa-solid fa-circle-info"></i> Empanelment fee is not present in the system yet — status stays <strong>Pending</strong> until the fee record is available.</p>`;
+  } else if (!lock && !mode) {
+    summary = `<p class="empanel-panel-lead empanel-panel-lead--hint"><i class="fa-solid fa-circle-info"></i> Select Online or Offline — the payment form opens in a modal.</p>`;
+  } else if (!lock && mode) {
+    summary = `<div class="wf-actions mt-2" style="margin-bottom:0">
+      <button type="button" class="btn btn-outline btn-sm" onclick="openEmpanelmentPaymentModal('${mode}')">
+        <i class="fa-solid fa-wallet"></i> Open ${mode === 'online' ? 'online' : 'offline'} payment form
+      </button>
+    </div>`;
+  }
+
+  return `<div class="empanel-fee-block">
+    <div class="need-section-head">
+      <h4><i class="fa-solid fa-indian-rupee-sign"></i> Empanelment fee</h4>
+      ${statusBadge}
+    </div>
+    <div class="form-grid wf-form-grid">
+      <div class="form-group"><label>Fee amount</label><input type="text" value="${escapeHtmlLite(e.amount || EMPANELMENT_FEE_AMOUNT)}" readonly></div>
+      <div class="form-group"><label>${reqLabel('Payment mode')}</label>${modePicker}</div>
+    </div>
+    ${summary}
+  </div>`;
+}
+
+function renderEmpanelmentPaymentModalBody(mode) {
+  const e = ensureEmpanelmentState();
+  const lock = e.status === 'submitted';
+
+  if (mode === 'online') {
+    const o = e.online || {};
+    return `<div class="consol-detail-modal empanel-payment-modal">
+      <p class="consol-detail-lead">Transfer <strong>${escapeHtmlLite(e.amount)}</strong> via NEFT / RTGS using the bank details below, then enter your UTR and payment date.</p>
+      <div class="empanel-panel-head" style="margin-bottom:0.75rem">
+        <h5 style="margin:0"><i class="fa-solid fa-building-columns"></i> Online payment — NEFT / RTGS</h5>
+        <button type="button" class="btn btn-outline btn-sm" onclick="copyEmpanelmentBankDetails()"><i class="fa-solid fa-copy"></i> Copy bank details</button>
+      </div>
+      <div class="label-grid empanel-payee">
+        <div class="label-item"><span class="label-key">Beneficiary</span><span class="label-val">${EMPANELMENT_PAYEE.name}</span></div>
+        <div class="label-item"><span class="label-key">Bank</span><span class="label-val">${EMPANELMENT_PAYEE.bank}</span></div>
+        <div class="label-item"><span class="label-key">Account No.</span><span class="label-val">${EMPANELMENT_PAYEE.account}</span></div>
+        <div class="label-item"><span class="label-key">IFSC</span><span class="label-val">${EMPANELMENT_PAYEE.ifsc}</span></div>
+        <div class="label-item"><span class="label-key">Branch</span><span class="label-val">${EMPANELMENT_PAYEE.branch}</span></div>
+        <div class="label-item"><span class="label-key">Amount</span><span class="label-val"><strong>${escapeHtmlLite(e.amount)}</strong></span></div>
+      </div>
+      <div class="form-grid wf-form-grid mt-2">
+        ${customSelectHTML('Transfer method', 'empMethod', ['NEFT', 'RTGS'], o.method || 'NEFT', true)}
+        <div class="form-group"><label>${reqLabel('UTR / Reference No.')}</label><input id="empUtr" type="text" placeholder="Bank UTR number" value="${escapeHtmlLite(o.utr || '')}"${lock ? ' readonly' : ''}></div>
+        ${datePickerHTML('empPaidOn', o.paidOn || '', reqLabel('Payment date'), lock)}
+        <div class="form-group"><label>Remitter bank</label><input id="empRemitter" type="text" placeholder="Your bank name" value="${escapeHtmlLite(o.remitterBank || '')}"${lock ? ' readonly' : ''}></div>
+      </div>
+      <div class="wf-actions mt-2">
+        <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+        ${!lock ? `<button type="button" class="btn btn-primary" onclick="confirmEmpanelmentOnline()"><i class="fa-solid fa-check"></i> Confirm online payment</button>` : ''}
+      </div>
+    </div>`;
+  }
+
+  const f = e.offline || {};
+  return `<div class="consol-detail-modal empanel-payment-modal">
+    <p class="consol-detail-lead">Upload challan / receipt / DD or pay-order scan (PDF, JPG, PNG) to complete offline empanelment fee payment.</p>
+    <div class="form-grid wf-form-grid">
+      <div class="form-group"><label>Receipt / challan no.</label><input id="empReceiptNo" type="text" placeholder="Optional reference" value="${escapeHtmlLite(f.receiptNo || '')}"${lock ? ' readonly' : ''}></div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label>${reqLabel('Payment proof')}</label>
+        ${lock
+          ? `<div class="wf-file-status">${f.fileName ? `<i class="fa-solid fa-file"></i> ${escapeHtmlLite(f.fileName)}` : '—'}</div>`
+          : renderInlineUpload({
+            id: 'empOfflineFile',
+            title: 'Upload payment proof',
+            hint: 'Challan / receipt / DD · PDF, JPG, PNG',
+            disabled: false,
+            fileName: f.fileName || null,
+            onChange: 'onEmpanelmentOfflineUpload'
+          })}
+      </div>
+    </div>
+    <div class="wf-actions mt-2">
+      <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      ${!lock ? `<button type="button" class="btn btn-primary" onclick="submitEmpanelmentOffline()"><i class="fa-solid fa-upload"></i> Upload &amp; submit proof</button>` : ''}
+    </div>
+  </div>`;
+}
+
+function openEmpanelmentPaymentModal(mode) {
+  if (isVendorRegistrationSynced() && isEmpanelmentSubmitted()) return;
+  const e = ensureEmpanelmentState();
+  const m = mode === 'offline' ? 'offline' : mode === 'online' ? 'online' : (e.mode === 'offline' ? 'offline' : 'online');
+  e.mode = m;
+  persistVendorLifecycle();
+  openModal(
+    m === 'online' ? 'Online empanelment payment' : 'Offline empanelment payment',
+    renderEmpanelmentPaymentModalBody(m),
+    { wide: true, large: true, replace: true }
+  );
+  if (typeof initCustomSelects === 'function') initCustomSelects();
+}
+
+function setEmpanelmentMode(mode) {
+  if (isVendorRegistrationSynced() && isEmpanelmentSubmitted()) return;
+  const e = ensureEmpanelmentState();
+  if (e.status === 'submitted') return;
+  if (e.mode && e.mode !== mode) {
+    e.online = { method: 'NEFT', utr: '', paidOn: '', remitterBank: '' };
+    e.offline = { fileName: null, uploadedOn: '', receiptNo: '' };
+  }
+  e.mode = mode === 'offline' ? 'offline' : 'online';
+  e.status = 'pending';
+  e.source = 'manual';
+  persistVendorLifecycle();
+  refreshWorkflowUI();
+  openEmpanelmentPaymentModal(e.mode);
+}
+
+function copyEmpanelmentBankDetails() {
+  const text = [
+    `Beneficiary: ${EMPANELMENT_PAYEE.name}`,
+    `Bank: ${EMPANELMENT_PAYEE.bank}`,
+    `Account: ${EMPANELMENT_PAYEE.account}`,
+    `IFSC: ${EMPANELMENT_PAYEE.ifsc}`,
+    `Branch: ${EMPANELMENT_PAYEE.branch}`,
+    `Amount: ${EMPANELMENT_FEE_AMOUNT}`,
+    `Remark: ${EMPANELMENT_PAYEE.remark}`
+  ].join('\n');
+  const done = () => showWfAlert(`Bank details copied. Use them for NEFT / RTGS transfer of <strong>${EMPANELMENT_FEE_AMOUNT}</strong>.`, 'success');
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(done);
+  } else {
+    done();
+  }
+}
+
+function confirmEmpanelmentOnline() {
+  const e = ensureEmpanelmentState();
+  if (e.status === 'submitted') return;
+  e.mode = 'online';
+  const method = typeof getCustomSelectValue === 'function' ? getCustomSelectValue('empMethod') : 'NEFT';
+  const utr = document.getElementById('empUtr')?.value?.trim() || '';
+  const paidOn = document.getElementById('empPaidOn')?.value?.trim() || '';
+  const remitterBank = document.getElementById('empRemitter')?.value?.trim() || '';
+  e.online = { method: method || 'NEFT', utr, paidOn, remitterBank };
+  persistVendorLifecycle();
+  if (!utr || !paidOn) {
+    openModal('Cannot proceed', `<div class="wf-inline-alert wf-inline-alert--error">
+      <i class="fa-solid fa-circle-exclamation"></i>
+      <div><p>Enter UTR / Reference No. and Payment date to confirm online empanelment payment.</p></div>
+    </div>
+    <div class="wf-actions mt-2">
+      <button type="button" class="btn btn-primary" onclick="openEmpanelmentPaymentModal('online')">Back to payment form</button>
+    </div>`, { replace: true });
+    return;
+  }
+  e.offline = { fileName: null, uploadedOn: '', receiptNo: '' };
+  e.status = 'submitted';
+  e.source = 'manual';
+  persistVendorLifecycle();
+  closeModal();
+  refreshWorkflowUI();
+  openModal('Empanelment fee submitted', `<div class="wf-inline-alert wf-inline-alert--success">
+    <i class="fa-solid fa-circle-check"></i>
+    <div><p>Online ${escapeHtmlLite(e.online.method)} payment recorded (UTR <strong>${escapeHtmlLite(utr)}</strong>). You can now save registration details.</p></div>
+  </div>`);
+}
+
+function onEmpanelmentOfflineUpload(input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  const e = ensureEmpanelmentState();
+  const receiptNo = document.getElementById('empReceiptNo')?.value?.trim() || e.offline?.receiptNo || '';
+  e.offline = {
+    fileName: file.name,
+    uploadedOn: e.offline?.uploadedOn || '',
+    receiptNo
+  };
+  openEmpanelmentPaymentModal('offline');
+}
+
+function submitEmpanelmentOffline() {
+  const e = ensureEmpanelmentState();
+  if (e.status === 'submitted') return;
+  e.mode = 'offline';
+  const receiptNo = document.getElementById('empReceiptNo')?.value?.trim() || e.offline?.receiptNo || '';
+  const fileName = e.offline?.fileName || document.getElementById('empOfflineFile')?.files?.[0]?.name || null;
+  e.offline = {
+    fileName: fileName || e.offline?.fileName || null,
+    uploadedOn: e.offline?.uploadedOn || '',
+    receiptNo
+  };
+  persistVendorLifecycle();
+  if (!fileName) {
+    openModal('Cannot proceed', `<div class="wf-inline-alert wf-inline-alert--error">
+      <i class="fa-solid fa-circle-exclamation"></i>
+      <div><p>Upload the offline payment proof document before submitting.</p></div>
+    </div>
+    <div class="wf-actions mt-2">
+      <button type="button" class="btn btn-primary" onclick="openEmpanelmentPaymentModal('offline')">Back to payment form</button>
+    </div>`, { replace: true });
+    return;
+  }
+  e.offline = {
+    fileName,
+    uploadedOn: formatDateDMY(APP_TODAY),
+    receiptNo
+  };
+  e.online = { method: 'NEFT', utr: '', paidOn: '', remitterBank: '' };
+  e.status = 'submitted';
+  e.source = 'manual';
+  persistVendorLifecycle();
+  closeModal();
+  refreshWorkflowUI();
+  openModal('Empanelment fee submitted', `<div class="wf-inline-alert wf-inline-alert--success">
+    <i class="fa-solid fa-circle-check"></i>
+    <div><p>Offline proof <strong>${escapeHtmlLite(fileName)}</strong> uploaded. You can now save registration details.</p></div>
+  </div>`);
+}
+
 function createDefaultVendorStageState(profileType = 'new') {
   const onboardingDone = profileType === 'existing';
   return {
     profileType: onboardingDone ? 'existing' : 'new',
+    registrationSource: onboardingDone ? 'synced' : 'manual',
     completed: {
       1: onboardingDone, 2: onboardingDone, 3: onboardingDone,
       4: false, 5: false, 6: false, 7: false, 8: false, 9: false, 10: false
@@ -189,6 +523,9 @@ function createDefaultVendorStageState(profileType = 'new') {
       expiry: ''
     },
     empanelment: defaultEmpanelmentState(onboardingDone),
+    approval: onboardingDone
+      ? { systemLetter: true, approvedOn: '28-08-2026', letterNo: 'VAL/2026/0123' }
+      : { systemLetter: false, approvedOn: '', letterNo: '' },
     bid: {
       tenderId: '',
       tenderTitle: '',
@@ -245,6 +582,8 @@ function createDefaultVendorStageState(profileType = 'new') {
       ocrReady: false,
       fileName: null
     },
+    /** Extra delivery rows added via Add / Update modal (persisted) */
+    deliveryLocalRows: [],
     invoice: {
       number: '',
       grn: '',
@@ -254,6 +593,8 @@ function createDefaultVendorStageState(profileType = 'new') {
       ocrReady: false,
       fileName: null
     },
+    /** Extra invoice rows added via Add / Update modal (persisted) */
+    invoiceLocalRows: [],
     payment: {
       status: onboardingDone ? 'Awaiting Processing' : 'Not started',
       timeline: onboardingDone ? 'Within 45 days of invoice acceptance' : '—',
@@ -308,6 +649,7 @@ function buildVendorLifecycleSnapshot() {
   return {
     version: VENDOR_LIFECYCLE_STORAGE_VERSION,
     profileType: vendorStageState.profileType || 'new',
+    registrationSource: vendorStageState.registrationSource || (vendorStageState.profileType === 'existing' ? 'synced' : 'manual'),
     currentStep: currentWorkflowStep || getVendorActiveStageId(),
     lifecycleComplete: !!vendorLifecycleComplete,
     completed: { ...vendorStageState.completed },
@@ -330,6 +672,7 @@ function buildVendorLifecycleSnapshot() {
       online: { ...(vendorStageState.empanelment?.online || {}) },
       offline: { ...(vendorStageState.empanelment?.offline || {}) }
     },
+    approval: { ...(vendorStageState.approval || {}) },
     contract: {
       ...vendorStageState.contract,
       pbgOcr: vendorStageState.contract.pbgOcr ? { ...vendorStageState.contract.pbgOcr } : null,
@@ -348,7 +691,13 @@ function buildVendorLifecycleSnapshot() {
       })()
     },
     delivery: { ...vendorStageState.delivery },
+    deliveryLocalRows: Array.isArray(vendorStageState.deliveryLocalRows)
+      ? vendorStageState.deliveryLocalRows.map(r => ({ ...r }))
+      : [],
     invoice: { ...vendorStageState.invoice },
+    invoiceLocalRows: Array.isArray(vendorStageState.invoiceLocalRows)
+      ? vendorStageState.invoiceLocalRows.map(r => ({ ...r }))
+      : [],
     payment: {
       ...vendorStageState.payment,
       milestones: (vendorStageState.payment.milestones || []).map(m => ({ ...m }))
@@ -389,6 +738,8 @@ function readVendorLifecycleSnapshot(user = authUser) {
 function applyVendorStageStateObject(next) {
   if (!next) return;
   vendorStageState.profileType = next.profileType || vendorStageState.profileType || 'new';
+  vendorStageState.registrationSource = next.registrationSource
+    || (next.profileType === 'existing' || isSeededDemoVendor() ? 'synced' : 'manual');
   vendorStageState.completed = { ...vendorStageState.completed, ...(next.completed || {}) };
   vendorStageState.locked = { ...vendorStageState.locked, ...(next.locked || {}) };
   vendorStageState.registration = {
@@ -438,6 +789,13 @@ function applyVendorStageStateObject(next) {
   };
   Object.assign(vendorStageState.bid, next.bid || {});
   Object.assign(vendorStageState.award, next.award || {});
+  vendorStageState.approval = {
+    systemLetter: false,
+    approvedOn: '',
+    letterNo: '',
+    ...(vendorStageState.approval || {}),
+    ...(next.approval || {})
+  };
   if (!vendorStageState.empanelment) vendorStageState.empanelment = defaultEmpanelmentState(!!next.completed?.[1]);
   if (next.empanelment) {
     vendorStageState.empanelment = {
@@ -446,8 +804,13 @@ function applyVendorStageStateObject(next) {
       online: { ...defaultEmpanelmentState(false).online, ...(next.empanelment.online || {}) },
       offline: { ...defaultEmpanelmentState(false).offline, ...(next.empanelment.offline || {}) }
     };
-  } else if (next.completed?.[1] && vendorStageState.empanelment.status !== 'submitted') {
+    syncEmpanelmentStatusFromPresence();
+  } else if (
+    (vendorStageState.registrationSource === 'synced' || next.completed?.[1])
+    && vendorStageState.empanelment.status !== 'submitted'
+  ) {
     vendorStageState.empanelment = defaultEmpanelmentState(true);
+    vendorStageState.empanelment.source = 'synced';
   }
   Object.assign(vendorStageState.contract, next.contract || {});
   if (next.contract?.tenderPacks && typeof next.contract.tenderPacks === 'object') {
@@ -456,7 +819,13 @@ function applyVendorStageStateObject(next) {
     vendorStageState.contract.tenderPacks = {};
   }
   Object.assign(vendorStageState.delivery, next.delivery || {});
+  vendorStageState.deliveryLocalRows = Array.isArray(next.deliveryLocalRows)
+    ? next.deliveryLocalRows.map(r => ({ ...r }))
+    : (Array.isArray(vendorStageState.deliveryLocalRows) ? vendorStageState.deliveryLocalRows : []);
   Object.assign(vendorStageState.invoice, next.invoice || {});
+  vendorStageState.invoiceLocalRows = Array.isArray(next.invoiceLocalRows)
+    ? next.invoiceLocalRows.map(r => ({ ...r }))
+    : (Array.isArray(vendorStageState.invoiceLocalRows) ? vendorStageState.invoiceLocalRows : []);
   Object.assign(vendorStageState.payment, next.payment || {});
   if (Array.isArray(next.payment?.milestones)) {
     vendorStageState.payment.milestones = next.payment.milestones.map(m => ({ ...m }));
@@ -509,6 +878,9 @@ function initVendorLifecycleForSession(user) {
   if (isSeededDemoVendor(user)) {
     seedDemoVendorRegistrationDefaults();
   } else if (user) {
+    vendorStageState.registrationSource = 'manual';
+    vendorStageState.empanelment = defaultEmpanelmentState(false);
+    vendorStageState.empanelment.source = 'manual';
     vendorStageState.registration = {
       company: user.organization || '',
       contactName: user.name || '',
@@ -699,6 +1071,14 @@ function getRegistrationStates() {
 }
 
 function seedDemoVendorRegistrationDefaults() {
+  vendorStageState.registrationSource = 'synced';
+  vendorStageState.empanelment = defaultEmpanelmentState(true);
+  vendorStageState.empanelment.source = 'synced';
+  vendorStageState.approval = {
+    systemLetter: true,
+    approvedOn: '28-08-2026',
+    letterNo: 'VAL/2026/0123'
+  };
   vendorStageState.registration = {
     company: 'MediSupply India Pvt Ltd',
     contactName: authUser?.name || 'Amit Verma',
@@ -924,6 +1304,10 @@ function applyVendorBidDvdmsFetch({ isRefresh = false } = {}) {
     vendorStageState.bid.deadline = rows[0].deadline;
   }
   vendorBidDvdmsFilterState.page = 1;
+  if (rows.length) {
+    vendorStageState.bid.submitted = true;
+    if (!vendorStageState.completed?.[4]) completeVendorStage(4);
+  }
 }
 
 function ensureVendorBidDvdmsLoaded() {
@@ -980,6 +1364,59 @@ function getBidArticleCoverage(bidRow) {
   };
 }
 
+function applyArticleCoverageStatusFilter(label) {
+  const panel = document.querySelector('#modalBody .bid-article-panel');
+  if (!panel) return;
+  const yesLabel = (panel.dataset.yesLabel || 'Included').trim();
+  const noLabel = (panel.dataset.noLabel || 'Not included').trim();
+  const mode = (!label || label === 'All statuses')
+    ? 'all'
+    : label === noLabel || /^not\b/i.test(label)
+      ? 'not'
+      : 'yes';
+  const rows = [...panel.querySelectorAll('tbody tr.bid-article-row')];
+  let visible = 0;
+  rows.forEach(tr => {
+    const isYes = tr.classList.contains('is-bidded');
+    const show = mode === 'all' || (mode === 'yes' && isYes) || (mode === 'not' && !isYes);
+    tr.hidden = !show;
+    if (show) {
+      visible += 1;
+      const numCell = tr.querySelector('td');
+      if (numCell) numCell.textContent = String(visible);
+    }
+  });
+  const empty = panel.querySelector('.bid-article-filter-empty');
+  const tableWrap = panel.querySelector('.bid-article-table-wrap');
+  if (empty) {
+    empty.hidden = visible > 0;
+    const emptyCopy = empty.querySelector('p');
+    if (emptyCopy) emptyCopy.textContent = `No articles match the selected ${((panel.dataset.filterLabel || 'status')).toLowerCase()}.`;
+  }
+  if (tableWrap) tableWrap.hidden = visible === 0;
+}
+
+function bindArticleCoverageStatusFilter() {
+  const wrap = document.querySelector('#modalBody .custom-select[data-select-id="articleCoverageStatus"]');
+  if (!wrap || wrap.dataset.coverageStatusBound) return;
+  wrap.dataset.coverageStatusBound = '1';
+  wrap.addEventListener('change', e => {
+    const label = e.detail?.value
+      || (typeof getCustomSelectValue === 'function' ? getCustomSelectValue('articleCoverageStatus') : '');
+    applyArticleCoverageStatusFilter(label);
+  });
+}
+
+function renderArticleCoverageStatusFilter(opts = {}) {
+  const filterLabel = opts.filterLabel || opts.statusHead || 'Status';
+  const yesLabel = opts.yesLabel || 'Included';
+  const noLabel = opts.noLabel || 'Not included';
+  return `<div class="article-coverage-filter" title="Filter by ${escapeHtmlLite(filterLabel)}">
+      <span class="article-coverage-filter-label">${escapeHtmlLite(filterLabel)}</span>
+      ${inlineCustomSelectHTML('articleCoverageStatus', ['All statuses', yesLabel, noLabel], 'All statuses')}
+    </div>`;
+}
+
 function renderBidArticleCoveragePanel(bidRow) {
   const cov = getBidArticleCoverage(bidRow);
   if (!cov.articles.length) {
@@ -988,8 +1425,14 @@ function renderBidArticleCoveragePanel(bidRow) {
       <p class="dvdms-detail-note" style="margin:0.75rem">No master articles found for ${escapeHtmlLite(cov.category)}.</p>
     </div>`;
   }
+  const filterOpts = {
+    filterLabel: 'Bid Status',
+    statusHead: 'Bid status',
+    yesLabel: 'Bidded',
+    noLabel: 'Not bidded'
+  };
   const rows = cov.articles.map((a, idx) => `
-    <tr class="${a.bidded ? 'bid-article-row is-bidded' : 'bid-article-row is-not-bidded'}">
+    <tr class="${a.bidded ? 'bid-article-row is-bidded' : 'bid-article-row is-not-bidded'}" data-coverage-status="${a.bidded ? 'yes' : 'not'}">
       <td>${idx + 1}</td>
       <td>
         <strong>${escapeHtmlLite(a.name)}</strong>
@@ -1004,7 +1447,7 @@ function renderBidArticleCoveragePanel(bidRow) {
       </td>
     </tr>`).join('');
 
-  return `<div class="dvdms-detail-panel bid-article-panel">
+  return `<div class="dvdms-detail-panel bid-article-panel" data-yes-label="Bidded" data-no-label="Not bidded" data-filter-label="Bid Status">
     <div class="dvdms-detail-panel-head">
       ${escapeHtmlLite(cov.category)} articles · bid coverage
       <span class="bid-article-coverage-meta">
@@ -1013,9 +1456,12 @@ function renderBidArticleCoveragePanel(bidRow) {
         <span class="badge badge-info">${cov.total} total</span>
       </span>
     </div>
-    <div class="bid-article-legend">
-      <span><i class="fa-solid fa-circle-check"></i> Included in this vendor bid</span>
-      <span><i class="fa-solid fa-circle-minus"></i> In category catalogue · not quoted on this bid</span>
+    <div class="bid-article-toolbar">
+      <div class="bid-article-legend">
+        <span><i class="fa-solid fa-circle-check"></i> Included in this vendor bid</span>
+        <span><i class="fa-solid fa-circle-minus"></i> In category catalogue · not quoted on this bid</span>
+      </div>
+      ${renderArticleCoverageStatusFilter(filterOpts)}
     </div>
     <div class="data-table-wrap bid-article-table-wrap">
       <table class="data-table data-table--modal bid-article-table">
@@ -1025,23 +1471,33 @@ function renderBidArticleCoveragePanel(bidRow) {
         <tbody>${rows}</tbody>
       </table>
     </div>
+    <div class="bid-article-filter-empty" hidden>
+      <i class="fa-solid fa-filter"></i>
+      <p>No articles match the selected bid status.</p>
+    </div>
   </div>`;
 }
 
 function renderVendorBidDvdmsTableRows(rows) {
   return rows.map(r => {
-    const emdLabel = r.emdAmount ? `${r.emdStatus} · ${r.emdAmount}` : (r.emdStatus || '—');
     const id = escapeHtmlLite(r.bidId);
+    const emdStatus = escapeHtmlLite(r.emdStatus || '—');
+    const emdAmount = r.emdAmount ? escapeHtmlLite(r.emdAmount) : '';
     return `<tr class="need-row-clickable" role="button" tabindex="0" onclick="openVendorBidDvdmsDetail('${id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openVendorBidDvdmsDetail('${id}')}" title="View bid details">
-      <td><strong>${id}</strong></td>
-      <td><strong>${escapeHtmlLite(r.tenderId)}</strong><div class="table-sub">${escapeHtmlLite(r.title || '')}</div></td>
-      <td>${escapeHtmlLite(r.category || '—')}</td>
-      <td><span class="badge badge-${emdStatusBadgeClass(r.emdStatus)}">${escapeHtmlLite(emdLabel)}</span></td>
-      <td>${escapeHtmlLite(r.deadline || '—')}</td>
-      <td>${escapeHtmlLite(r.techStatus || '—')}</td>
-      <td>${escapeHtmlLite(r.finStatus || '—')}</td>
-      <td><span class="badge badge-${bidStatusBadgeClass(r.status)}">${escapeHtmlLite(r.status || '—')}</span></td>
-      <td>${escapeHtmlLite(r.submittedOn || '—')}</td>
+      <td class="cell-id"><strong>${id}</strong></td>
+      <td class="cell-tender"><strong>${escapeHtmlLite(r.tenderId)}</strong><div class="table-sub">${escapeHtmlLite(r.title || '')}</div></td>
+      <td class="cell-category">${escapeHtmlLite(r.category || '—')}</td>
+      <td class="cell-emd">
+        <span class="status-stack">
+          <span class="badge badge-${emdStatusBadgeClass(r.emdStatus)}">${emdStatus}</span>
+          ${emdAmount ? `<span class="status-meta">${emdAmount}</span>` : ''}
+        </span>
+      </td>
+      <td class="cell-nowrap">${escapeHtmlLite(r.deadline || '—')}</td>
+      <td class="cell-nowrap">${escapeHtmlLite(r.techStatus || '—')}</td>
+      <td class="cell-nowrap">${escapeHtmlLite(r.finStatus || '—')}</td>
+      <td class="cell-status"><span class="badge badge-${bidStatusBadgeClass(r.status)}">${escapeHtmlLite(r.status || '—')}</span></td>
+      <td class="cell-nowrap">${escapeHtmlLite(r.submittedOn || '—')}</td>
     </tr>`;
   }).join('');
 }
@@ -1053,7 +1509,6 @@ function renderVendorBidSubmissionStage(canEdit = true) {
   const paged = paginateItems(filtered, vendorBidDvdmsFilterState.page, 10);
   vendorBidDvdmsFilterState.page = paged.page;
   const loading = vendorBidDvdmsState.status === 'loading';
-  const confirmed = !!vendorStageState.completed?.[4] || !!vendorStageState.bid?.submitted;
   const refreshDis = loading ? ' disabled' : '';
   const periodLabel = getWfPeriodFilterLabel(vendorBidDvdmsFilterState);
   const categoryOptions = getVendorBidDvdmsCategoryOptions();
@@ -1061,19 +1516,20 @@ function renderVendorBidSubmissionStage(canEdit = true) {
     ? 'All categories'
     : vendorBidDvdmsFilterState.category;
 
-  const emptyBlock = !paged.items.length
-    ? (vendorBidDvdmsState.rows.length
-      ? `<div class="empty-state-card"><i class="fa-solid fa-filter"></i><p>No bid records match <strong>${escapeHtmlLite(periodLabel)}</strong>${vendorBidDvdmsFilterState.category !== 'all' ? ` · ${escapeHtmlLite(vendorBidDvdmsFilterState.category)}` : ''}.</p><button type="button" class="btn btn-outline btn-sm" onclick="setVendorBidDvdmsCategory('All categories')">Clear category filter</button></div>`
-      : renderVendorOnboardingEmptyState({
+  const emptyBlock = !vendorBidDvdmsState.rows.length
+    ? renderVendorOnboardingEmptyState({
         icon: 'fa-file-invoice',
         title: 'No bid records yet',
         body: 'No bids were returned for your vendor code. Refresh to pull the latest bid status once tenders are submitted.',
-        steps: ['Submit your bid externally', 'Refresh to load bid records', 'Confirm sync to continue lifecycle']
-      }))
+        steps: ['Submit your bid externally', 'Refresh to load bid records', 'Review synced bid status to continue']
+      })
     : '';
 
-  const tableBlock = paged.items.length
-    ? `<div class="data-table-wrap bid-dvdms-table-wrap">
+  const filterEmptyRow = !paged.items.length && vendorBidDvdmsState.rows.length
+    ? `<tr class="table-filter-empty-row"><td colspan="9"><div class="table-filter-empty"><i class="fa-solid fa-filter"></i><p>No bid records match <strong>${escapeHtmlLite(periodLabel)}</strong>${vendorBidDvdmsFilterState.category !== 'all' ? ` · ${escapeHtmlLite(vendorBidDvdmsFilterState.category)}` : ''}.</p><button type="button" class="btn btn-outline btn-sm" onclick="setVendorBidDvdmsCategory('All categories')">Clear category filter</button></div></td></tr>`
+    : '';
+
+  const tableBlock = `<div class="data-table-wrap bid-dvdms-table-wrap">
         <div class="table-header bid-records-header">
           <h3>Bid records <span class="meta-chip" style="margin:0">${escapeHtmlLite(periodLabel)}</span></h3>
           <div class="bid-records-category-filter" title="Filter by category">
@@ -1082,33 +1538,25 @@ function renderVendorBidSubmissionStage(canEdit = true) {
           </div>
         </div>
         ${renderCompactWfPeriodFilter('vendorBidDvdms', vendorBidDvdmsFilterState)}
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Bid ID</th>
-              <th>Tender</th>
-              <th>Category</th>
-              <th>EMD</th>
-              <th>Deadline</th>
-              <th>Technical</th>
-              <th>Financial</th>
-              <th>Status</th>
-              <th>Submitted</th>
-            </tr>
-          </thead>
-          <tbody>${renderVendorBidDvdmsTableRows(paged.items)}</tbody>
-        </table>
-        ${renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setVendorBidDvdmsPage', { hideInfo: true })}
-      </div>`
-    : `<div class="data-table-wrap bid-dvdms-table-wrap">
-        <div class="table-header bid-records-header">
-          <h3>Bid records <span class="meta-chip" style="margin:0">${escapeHtmlLite(periodLabel)}</span></h3>
-          <div class="bid-records-category-filter" title="Filter by category">
-            <span class="bid-records-category-label">Category</span>
-            ${inlineCustomSelectHTML('bidDvdmsCategory', categoryOptions, categorySelected)}
-          </div>
+        <div class="bid-dvdms-table-scroll">
+          <table class="data-table bid-sync-table">
+            <thead>
+              <tr>
+                <th>Bid ID</th>
+                <th>Tender</th>
+                <th>Category</th>
+                <th>EMD</th>
+                <th>Deadline</th>
+                <th>Technical</th>
+                <th>Financial</th>
+                <th>Status</th>
+                <th>Submitted</th>
+              </tr>
+            </thead>
+            <tbody>${paged.items.length ? renderVendorBidDvdmsTableRows(paged.items) : filterEmptyRow}</tbody>
+          </table>
         </div>
-        ${renderCompactWfPeriodFilter('vendorBidDvdms', vendorBidDvdmsFilterState)}
+        ${paged.items.length ? renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setVendorBidDvdmsPage', { hideInfo: true }) : ''}
       </div>`;
 
   return `<div class="need-api bid-dvdms-stage">
@@ -1127,16 +1575,7 @@ function renderVendorBidSubmissionStage(canEdit = true) {
     </div>
 
     ${emptyBlock}
-    ${tableBlock}
-
-    <div class="wf-actions mt-2">
-      <button type="button" class="btn btn-outline" onclick="refreshVendorBidDvdmsApi()"${refreshDis}>
-        <i class="fa-solid fa-arrows-rotate"></i> Refresh
-      </button>
-      <button type="button" class="btn btn-primary" onclick="confirmVendorBidDvdmsSync()"${(!canEdit || confirmed || !vendorBidDvdmsState.rows.length) ? ' disabled' : ''}>
-        <i class="fa-solid fa-check"></i> ${confirmed ? 'Bid sync confirmed' : 'Confirm sync & continue'}
-      </button>
-    </div>
+    ${vendorBidDvdmsState.rows.length ? tableBlock : ''}
   </div>`;
 }
 
@@ -1341,6 +1780,9 @@ function applyVendorAwardSyncFetch({ isRefresh = false } = {}) {
     vendorStageState.award.value = rows[0].value;
   }
   vendorAwardSyncFilterState.page = 1;
+  if (vendorStageState.award?.acknowledged && !vendorStageState.completed?.[5]) {
+    completeVendorStage(5);
+  }
 }
 
 function ensureVendorAwardSyncLoaded() {
@@ -1388,6 +1830,7 @@ function categoryUsesItemWiseAwardDetail(category) {
 }
 
 function resolveLifecycleCoveredItems(row) {
+  if (row?.forceEmptyCoverage) return [];
   const direct = row?.coveredItems || row?.awardedItems || row?.biddedItems
     || row?.deliveredItems || row?.invoicedItems || row?.paidItems || row?.renewalItems;
   if (Array.isArray(direct) && direct.length) return direct;
@@ -1433,6 +1876,7 @@ function renderLifecycleArticleCoveragePanel(row, opts = {}) {
   const yesHint = opts.yesHint || 'Included for this record';
   const noHint = opts.noHint || 'In category catalogue · not part of this record';
   const statusHead = opts.statusHead || 'Status';
+  const filterLabel = opts.filterLabel || statusHead;
   const cov = getLifecycleArticleCoverage(row);
   if (!cov.articles.length) {
     return `<div class="dvdms-detail-panel">
@@ -1441,7 +1885,7 @@ function renderLifecycleArticleCoveragePanel(row, opts = {}) {
     </div>`;
   }
   const rows = cov.articles.map((a, idx) => `
-    <tr class="${a.covered ? 'bid-article-row is-bidded' : 'bid-article-row is-not-bidded'}">
+    <tr class="${a.covered ? 'bid-article-row is-bidded' : 'bid-article-row is-not-bidded'}" data-coverage-status="${a.covered ? 'yes' : 'not'}">
       <td>${idx + 1}</td>
       <td>
         <strong>${escapeHtmlLite(a.name)}</strong>
@@ -1456,7 +1900,7 @@ function renderLifecycleArticleCoveragePanel(row, opts = {}) {
       </td>
     </tr>`).join('');
 
-  return `<div class="dvdms-detail-panel bid-article-panel">
+  return `<div class="dvdms-detail-panel bid-article-panel" data-yes-label="${escapeHtmlLite(yesLabel)}" data-no-label="${escapeHtmlLite(noLabel)}" data-filter-label="${escapeHtmlLite(filterLabel)}">
     <div class="dvdms-detail-panel-head">
       ${escapeHtmlLite(headTitle)}
       <span class="bid-article-coverage-meta">
@@ -1465,9 +1909,12 @@ function renderLifecycleArticleCoveragePanel(row, opts = {}) {
         <span class="badge badge-info">${cov.total} total</span>
       </span>
     </div>
-    <div class="bid-article-legend">
-      <span><i class="fa-solid fa-circle-check"></i> ${escapeHtmlLite(yesHint)}</span>
-      <span><i class="fa-solid fa-circle-minus"></i> ${escapeHtmlLite(noHint)}</span>
+    <div class="bid-article-toolbar">
+      <div class="bid-article-legend">
+        <span><i class="fa-solid fa-circle-check"></i> ${escapeHtmlLite(yesHint)}</span>
+        <span><i class="fa-solid fa-circle-minus"></i> ${escapeHtmlLite(noHint)}</span>
+      </div>
+      ${renderArticleCoverageStatusFilter({ filterLabel, statusHead, yesLabel, noLabel })}
     </div>
     <div class="data-table-wrap bid-article-table-wrap">
       <table class="data-table data-table--modal bid-article-table">
@@ -1476,6 +1923,10 @@ function renderLifecycleArticleCoveragePanel(row, opts = {}) {
         </thead>
         <tbody>${rows}</tbody>
       </table>
+    </div>
+    <div class="bid-article-filter-empty" hidden>
+      <i class="fa-solid fa-filter"></i>
+      <p>No articles match the selected ${escapeHtmlLite(filterLabel.toLowerCase())}.</p>
     </div>
   </div>`;
 }
@@ -1550,7 +2001,8 @@ function renderAwardArticleCoveragePanel(awardRow) {
       noLabel: 'Not awarded',
       yesHint: 'Line items covered under this LOA / award',
       noHint: 'In category catalogue · not part of this award',
-      statusHead: 'Award status'
+      statusHead: 'Award status',
+      filterLabel: 'Award Status'
     }
   );
 }
@@ -1588,18 +2040,26 @@ function renderAwardCategoryScopePanel(awardRow) {
   </div>`;
 }
 
+function loaStatusBadgeClass(status) {
+  const s = String(status || '').toLowerCase();
+  if (s.includes('acknowledged')) return 'success';
+  if (s.includes('issued')) return 'info';
+  if (s.includes('pending')) return 'warning';
+  return 'muted';
+}
+
 function renderVendorAwardSyncTableRows(rows) {
   return rows.map(r => {
     const id = escapeHtmlLite(r.awardId);
     return `<tr class="need-row-clickable" role="button" tabindex="0" onclick="openVendorAwardSyncDetail('${id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openVendorAwardSyncDetail('${id}')}" title="View award details">
-      <td><strong>${id}</strong></td>
-      <td><strong>${escapeHtmlLite(r.tenderId)}</strong><div class="table-sub">${escapeHtmlLite(r.title || '')}</div></td>
-      <td>${escapeHtmlLite(r.category || '—')}</td>
-      <td><span class="badge badge-info">${escapeHtmlLite(r.loaStatus || '—')}</span></td>
-      <td>${escapeHtmlLite(r.loaDate || '—')}</td>
-      <td><strong>${escapeHtmlLite(r.pbgDue || '—')}</strong></td>
-      <td><span class="masked-value" title="Sensitive — masked">${maskSensitiveValue(r.value)}</span></td>
-      <td><span class="badge badge-${awardAckBadgeClass(r.acknowledgement)}">${escapeHtmlLite(r.acknowledgement || '—')}</span></td>
+      <td class="cell-id"><strong>${id}</strong></td>
+      <td class="cell-tender"><strong>${escapeHtmlLite(r.tenderId)}</strong><div class="table-sub">${escapeHtmlLite(r.title || '')}</div></td>
+      <td class="cell-category">${escapeHtmlLite(r.category || '—')}</td>
+      <td class="cell-status"><span class="badge badge-${loaStatusBadgeClass(r.loaStatus)}">${escapeHtmlLite(r.loaStatus || '—')}</span></td>
+      <td class="cell-nowrap">${escapeHtmlLite(r.loaDate || '—')}</td>
+      <td class="cell-nowrap"><strong>${escapeHtmlLite(r.pbgDue || '—')}</strong></td>
+      <td class="cell-award-value"><span class="masked-value" title="Sensitive — masked">${maskSensitiveValue(r.value)}</span></td>
+      <td class="cell-status"><span class="badge badge-${awardAckBadgeClass(r.acknowledgement)}">${escapeHtmlLite(r.acknowledgement || '—')}</span></td>
     </tr>`;
   }).join('');
 }
@@ -1611,24 +2071,24 @@ function renderVendorAwardNotificationStage(canEdit = true) {
   const paged = paginateItems(filtered, vendorAwardSyncFilterState.page, 10);
   vendorAwardSyncFilterState.page = paged.page;
   const loading = vendorAwardSyncState.status === 'loading';
-  const confirmed = !!vendorStageState.completed?.[5];
   const refreshDis = loading ? ' disabled' : '';
   const periodLabel = getWfPeriodFilterLabel(vendorAwardSyncFilterState);
-  const hasAck = (vendorAwardSyncState.rows || []).some(r => /acknowledged/i.test(r.acknowledgement)) || !!vendorStageState.award?.acknowledged;
   const categoryOptions = getVendorAwardSyncCategoryOptions();
   const categorySelected = vendorAwardSyncFilterState.category === 'all'
     ? 'All categories'
     : vendorAwardSyncFilterState.category;
 
-  const emptyBlock = !paged.items.length
-    ? (vendorAwardSyncState.rows.length
-      ? `<div class="empty-state-card"><i class="fa-solid fa-filter"></i><p>No award records match <strong>${escapeHtmlLite(periodLabel)}</strong>${vendorAwardSyncFilterState.category !== 'all' ? ` · ${escapeHtmlLite(vendorAwardSyncFilterState.category)}` : ''}.</p><button type="button" class="btn btn-outline btn-sm" onclick="setVendorAwardSyncCategory('All categories')">Clear category filter</button></div>`
-      : renderVendorOnboardingEmptyState({
+  const emptyBlock = !vendorAwardSyncState.rows.length
+    ? renderVendorOnboardingEmptyState({
         icon: 'fa-trophy',
         title: 'No award records yet',
         body: 'No awards were returned for your vendor code. Refresh to pull the latest LOA / award status once awards are issued.',
         steps: ['Win / receive an award', 'Refresh to load award records', 'Acknowledge LOA to continue']
-      }))
+      })
+    : '';
+
+  const filterEmptyRow = !paged.items.length && vendorAwardSyncState.rows.length
+    ? `<tr class="table-filter-empty-row"><td colspan="8"><div class="table-filter-empty"><i class="fa-solid fa-filter"></i><p>No award records match <strong>${escapeHtmlLite(periodLabel)}</strong>${vendorAwardSyncFilterState.category !== 'all' ? ` · ${escapeHtmlLite(vendorAwardSyncFilterState.category)}` : ''}.</p><button type="button" class="btn btn-outline btn-sm" onclick="setVendorAwardSyncCategory('All categories')">Clear category filter</button></div></td></tr>`
     : '';
 
   const headerBlock = `<div class="table-header bid-records-header">
@@ -1639,30 +2099,27 @@ function renderVendorAwardNotificationStage(canEdit = true) {
           </div>
         </div>`;
 
-  const tableBlock = paged.items.length
-    ? `<div class="data-table-wrap bid-dvdms-table-wrap">
+  const tableBlock = `<div class="data-table-wrap bid-dvdms-table-wrap award-records-table-wrap">
         ${headerBlock}
         ${renderCompactWfPeriodFilter('vendorAwardSync', vendorAwardSyncFilterState)}
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Award ID</th>
-              <th>Tender</th>
-              <th>Category</th>
-              <th>LOA Status</th>
-              <th>LOA Date</th>
-              <th>PBG Due</th>
-              <th>Award Value</th>
-              <th>Acknowledgement</th>
-            </tr>
-          </thead>
-          <tbody>${renderVendorAwardSyncTableRows(paged.items)}</tbody>
-        </table>
-        ${renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setVendorAwardSyncPage', { hideInfo: true })}
-      </div>`
-    : `<div class="data-table-wrap bid-dvdms-table-wrap">
-        ${headerBlock}
-        ${renderCompactWfPeriodFilter('vendorAwardSync', vendorAwardSyncFilterState)}
+        <div class="bid-dvdms-table-scroll">
+          <table class="data-table award-sync-table">
+            <thead>
+              <tr>
+                <th>Award ID</th>
+                <th>Tender</th>
+                <th>Category</th>
+                <th>LOA Status</th>
+                <th>LOA Date</th>
+                <th>PBG Due</th>
+                <th>Award Value</th>
+                <th>Acknowledgement</th>
+              </tr>
+            </thead>
+            <tbody>${paged.items.length ? renderVendorAwardSyncTableRows(paged.items) : filterEmptyRow}</tbody>
+          </table>
+        </div>
+        ${paged.items.length ? renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setVendorAwardSyncPage', { hideInfo: true }) : ''}
       </div>`;
 
   return `<div class="need-api bid-dvdms-stage">
@@ -1681,16 +2138,7 @@ function renderVendorAwardNotificationStage(canEdit = true) {
     </div>
 
     ${emptyBlock}
-    ${tableBlock}
-
-    <div class="wf-actions mt-2">
-      <button type="button" class="btn btn-outline" onclick="refreshVendorAwardSyncApi()"${refreshDis}>
-        <i class="fa-solid fa-arrows-rotate"></i> Refresh
-      </button>
-      <button type="button" class="btn btn-primary" onclick="confirmVendorAwardSync()"${(!canEdit || confirmed || !hasAck) ? ' disabled' : ''}>
-        <i class="fa-solid fa-check"></i> ${confirmed ? 'Award sync confirmed' : 'Confirm sync & continue'}
-      </button>
-    </div>
+    ${vendorAwardSyncState.rows.length ? tableBlock : ''}
   </div>`;
 }
 
@@ -1752,10 +2200,11 @@ function acknowledgeVendorAward(awardId) {
   vendorStageState.award.acknowledged = true;
   vendorStageState.contract.pbgStatus = '';
   vendorStageState.contract.contractStatus = '';
+  if (!vendorStageState.completed?.[5]) completeVendorStage(5);
   persistVendorLifecycle();
   closeModal();
   refreshWorkflowUI();
-  showWfAlert('LOA acknowledged. Click “Confirm sync & continue” to proceed.', 'success');
+  showWfAlert('LOA acknowledged. You can proceed to Contract Execution.', 'success');
 }
 
 function confirmVendorAwardSync() {
@@ -1879,16 +2328,37 @@ function cloneVendorDeliverySyncRows(seedRows) {
   }));
 }
 
+/** New / manual vendors with no prior portal delivery history (not demo / not synced registration). */
+function isManualVendorWithoutDeliveryHistory(user = authUser) {
+  if (currentRole !== 'vendor' || !user || isSeededDemoVendor(user)) return false;
+  if (vendorStageState.registrationSource === 'synced') return false;
+  if (vendorStageState.registrationSource === 'manual') return true;
+  return !!(user.isNewSignup || user.isNewAccount || vendorStageState.profileType === 'new');
+}
+
+/**
+ * Manual upload UI only when DVDMS sync succeeded with zero rows for a new vendor.
+ * Never on API error / failed sync.
+ */
+function shouldShowManualDeliveryUpload() {
+  if (vendorDeliverySyncState.status !== 'synced') return false;
+  if ((vendorDeliverySyncState.rows || []).length > 0) return false;
+  return isManualVendorWithoutDeliveryHistory();
+}
+
 function applyVendorDeliverySyncFetch({ isRefresh = false } = {}) {
   const seed = (typeof VENDOR_DELIVERY_SYNC_API !== 'undefined' && Array.isArray(VENDOR_DELIVERY_SYNC_API.rows))
     ? VENDOR_DELIVERY_SYNC_API.rows
     : [];
-  let rows = cloneVendorDeliverySyncRows(seed);
   vendorDeliverySyncState.fetchCount += 1;
-  if (isRefresh && vendorDeliverySyncState.fetchCount > 1 && rows[3] && /transit/i.test(rows[3].status || '')) {
-    rows = rows.map((r, i) => (i === 3
-      ? { ...r, status: 'Delivered', grn: 'Under inspection', deliveryDate: '09-09-2026', expectedDate: '09-09-2026', remarks: 'Facility receipt confirmed; GRN inspection in progress.' }
-      : r));
+  let rows = [];
+  if (!isManualVendorWithoutDeliveryHistory()) {
+    rows = cloneVendorDeliverySyncRows(seed);
+    if (isRefresh && vendorDeliverySyncState.fetchCount > 1 && rows[3] && /transit/i.test(rows[3].status || '')) {
+      rows = rows.map((r, i) => (i === 3
+        ? { ...r, status: 'Delivered', grn: 'Under inspection', deliveryDate: '09-09-2026', expectedDate: '09-09-2026', remarks: 'Facility receipt confirmed; GRN inspection in progress.' }
+        : r));
+    }
   }
   vendorDeliverySyncState.rows = rows;
   vendorDeliverySyncState.status = 'synced';
@@ -1900,7 +2370,23 @@ function applyVendorDeliverySyncFetch({ isRefresh = false } = {}) {
     VENDOR_DELIVERY_SYNC_API.meta.status = 'Synced';
     VENDOR_DELIVERY_SYNC_API.meta.lastSynced = vendorDeliverySyncState.lastSynced;
   }
+  // Merge vendor-added deliveries (modal updates) without duplicating IDs
+  const local = Array.isArray(vendorStageState.deliveryLocalRows) ? vendorStageState.deliveryLocalRows : [];
+  if (local.length) {
+    const seen = new Set(rows.map(r => r.deliveryId));
+    local.forEach(r => {
+      if (r?.deliveryId && !seen.has(r.deliveryId)) {
+        rows.push({ ...r });
+        seen.add(r.deliveryId);
+      }
+    });
+    vendorDeliverySyncState.rows = rows;
+  }
   vendorDeliverySyncFilterState.page = 1;
+  if (rows.length) {
+    vendorStageState.delivery.updated = true;
+    if (!vendorStageState.completed?.[7]) completeVendorStage(7);
+  }
 }
 
 function ensureVendorDeliverySyncLoaded() {
@@ -1944,19 +2430,65 @@ function deliveryStatusBadgeClass(status) {
   return 'muted';
 }
 
+function renderVendorDeliveryManualUploadStage(canEdit = true) {
+  const d = vendorStageState.delivery;
+  const uploadDis = !canEdit || d.updated;
+  return `<div class="wf-stage-note"><i class="fa-solid fa-circle-info"></i>
+      <div>No delivery records were found in the system for your vendor account yet. Upload the delivery status document for the active consignment. Labels below stay visible at all times; values are filled from your upload. Cold Chain Required remains selectable before and after upload.</div>
+    </div>
+    <div class="ocr-panel mt-2">
+      <div class="ocr-panel-head">
+        <h4><i class="fa-solid fa-truck"></i> Delivery Details</h4>
+        <span class="badge ${d.updated ? 'badge-success' : d.ocrReady ? 'badge-info' : 'badge-muted'}">${d.updated ? 'Saved' : d.ocrReady ? 'Ready — Review &amp; Save' : 'Awaiting upload'}</span>
+      </div>
+      <div class="label-grid">
+        ${ocrLabel('Delivery Challan No.', d.challan)}
+        ${ocrLabel('Dispatch Status', d.status ? `<span class="badge badge-info">${escapeHtmlLite(d.status)}</span>` : '', { html: true })}
+        ${ocrLabel('Vehicle / LR No.', d.vehicle)}
+        ${ocrLabel('Dispatch Date', d.dispatchDate)}
+        ${ocrLabel('Expected Delivery Date', d.expectedDate)}
+        ${ocrLabel('Remarks', d.remarks)}
+        ${ocrLabel('Uploaded Document', d.fileName || '')}
+      </div>
+      <div class="ocr-panel-control">
+        ${customSelectHTML('Cold Chain Required', 'delColdChain', ['No', 'Yes'], d.coldChain || 'No', true)}
+      </div>
+    </div>
+    <div class="mt-2">
+      ${renderInlineUpload({
+        id: 'wfInlineDelivery',
+        title: 'Upload Delivery Status Document',
+        hint: 'Delivery challan / dispatch note · PDF / JPG — fills all delivery labels above',
+        disabled: uploadDis,
+        fileName: d.fileName,
+        onChange: 'handleDeliveryInlineUpload'
+      })}
+    </div>
+    ${!canEdit ? '<div class="wf-inline-alert wf-inline-alert--info mt-2"><i class="fa-solid fa-lock"></i><div><p>Complete Bid Submission through Contract Execution (Stages 4–6) to unlock delivery updates.</p></div></div>' : ''}
+    <div class="wf-actions mt-2">
+      <button type="button" class="btn btn-primary"${!canEdit || !d.ocrReady || d.updated ? ' disabled' : ''} onclick="saveDeliveryOcr()">Save Delivery Details</button>
+      <button type="button" class="btn btn-outline" onclick="navigateTo('delivery')">Open Delivery &amp; Invoices</button>
+    </div>`;
+}
+
+function renderVendorDeliveryStage(canEdit = true) {
+  ensureVendorDeliverySyncLoaded();
+  if (shouldShowManualDeliveryUpload()) {
+    return renderVendorDeliveryManualUploadStage(canEdit);
+  }
+  return renderVendorDeliverySyncStage(canEdit);
+}
+
 function renderVendorDeliverySyncTableRows(rows) {
   return rows.map(r => {
     const id = escapeHtmlLite(r.deliveryId);
     return `<tr class="need-row-clickable" role="button" tabindex="0" onclick="openVendorDeliverySyncDetail('${id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openVendorDeliverySyncDetail('${id}')}" title="View delivery details">
-      <td><strong>${id}</strong><div class="table-sub">${escapeHtmlLite(r.challan || '')}</div></td>
-      <td><strong>${escapeHtmlLite(r.poId || '—')}</strong><div class="table-sub">${escapeHtmlLite(r.tenderId || '')}</div></td>
-      <td>${escapeHtmlLite(r.category || '—')}</td>
-      <td>${escapeHtmlLite(r.items || r.title || '—')}</td>
-      <td><span class="badge badge-${deliveryStatusBadgeClass(r.status)}">${escapeHtmlLite(r.status || '—')}</span></td>
-      <td><span class="badge badge-${r.grn === 'Accepted' ? 'success' : 'warning'}">${escapeHtmlLite(r.grn || '—')}</span></td>
-      <td>${escapeHtmlLite(r.coldChain || '—')}</td>
-      <td>${escapeHtmlLite(r.dispatchDate || '—')}</td>
-      <td>${escapeHtmlLite(r.deliveryDate || '—')}</td>
+      <td class="cell-id"><strong>${id}</strong><div class="table-sub">${escapeHtmlLite(r.challan || '')}</div></td>
+      <td class="cell-tender"><strong>${escapeHtmlLite(r.poId || '—')}</strong><div class="table-sub">${escapeHtmlLite(r.tenderId || '')}</div></td>
+      <td class="cell-category">${escapeHtmlLite(r.category || '—')}</td>
+      <td class="cell-tender">${escapeHtmlLite(r.items || r.title || '—')}</td>
+      <td class="cell-status"><span class="badge badge-${deliveryStatusBadgeClass(r.status)}">${escapeHtmlLite(r.status || '—')}</span></td>
+      <td class="cell-nowrap">${escapeHtmlLite(r.deliveryDate || '—')}</td>
     </tr>`;
   }).join('');
 }
@@ -1968,7 +2500,6 @@ function renderVendorDeliverySyncStage(canEdit = true) {
   const paged = paginateItems(filtered, vendorDeliverySyncFilterState.page, 10);
   vendorDeliverySyncFilterState.page = paged.page;
   const loading = vendorDeliverySyncState.status === 'loading';
-  const confirmed = !!vendorStageState.completed?.[7] || !!vendorStageState.delivery?.updated;
   const refreshDis = loading ? ' disabled' : '';
   const periodLabel = getWfPeriodFilterLabel(vendorDeliverySyncFilterState);
   const categoryOptions = getVendorDeliverySyncCategoryOptions();
@@ -1976,50 +2507,51 @@ function renderVendorDeliverySyncStage(canEdit = true) {
     ? 'All categories'
     : vendorDeliverySyncFilterState.category;
 
-  const emptyBlock = !paged.items.length
-    ? (vendorDeliverySyncState.rows.length
-      ? `<div class="empty-state-card"><i class="fa-solid fa-filter"></i><p>No delivery records match <strong>${escapeHtmlLite(periodLabel)}</strong>${vendorDeliverySyncFilterState.category !== 'all' ? ` · ${escapeHtmlLite(vendorDeliverySyncFilterState.category)}` : ''}.</p><button type="button" class="btn btn-outline btn-sm" onclick="setVendorDeliverySyncCategory('All categories')">Clear category filter</button></div>`
-      : renderVendorOnboardingEmptyState({
+  const emptyBlock = !vendorDeliverySyncState.rows.length
+    ? renderVendorOnboardingEmptyState({
         icon: 'fa-truck',
         title: 'No delivery records yet',
         body: 'No consignments were returned for your vendor code. Refresh to pull the latest dispatch and GRN status once deliveries are recorded.',
-        steps: ['Dispatch against an active PO', 'Refresh to load delivery records', 'Confirm sync to continue lifecycle']
-      }))
+        steps: ['Dispatch against an active PO', 'Refresh to load delivery records', 'Review synced delivery status to continue']
+      })
+    : '';
+
+  const filterEmptyRow = !paged.items.length && vendorDeliverySyncState.rows.length
+    ? `<tr class="table-filter-empty-row"><td colspan="6"><div class="table-filter-empty"><i class="fa-solid fa-filter"></i><p>No delivery records match <strong>${escapeHtmlLite(periodLabel)}</strong>${vendorDeliverySyncFilterState.category !== 'all' ? ` · ${escapeHtmlLite(vendorDeliverySyncFilterState.category)}` : ''}.</p><button type="button" class="btn btn-outline btn-sm" onclick="setVendorDeliverySyncCategory('All categories')">Clear category filter</button></div></td></tr>`
     : '';
 
   const headerBlock = `<div class="table-header bid-records-header">
           <h3>Delivery records <span class="meta-chip" style="margin:0">${escapeHtmlLite(periodLabel)}</span></h3>
-          <div class="bid-records-category-filter" title="Filter by category">
-            <span class="bid-records-category-label">Category</span>
-            ${inlineCustomSelectHTML('deliverySyncCategory', categoryOptions, categorySelected)}
+          <div class="bid-records-header-actions">
+            ${vendorDeliverySyncState.rows.length ? `<button type="button" class="btn btn-primary btn-sm" onclick="openVendorDeliveryUpdateModal()">
+              <i class="fa-solid fa-plus"></i> Add / Update delivery
+            </button>` : ''}
+            <div class="bid-records-category-filter" title="Filter by category">
+              <span class="bid-records-category-label">Category</span>
+              ${inlineCustomSelectHTML('deliverySyncCategory', categoryOptions, categorySelected)}
+            </div>
           </div>
         </div>`;
 
-  const tableBlock = paged.items.length
-    ? `<div class="data-table-wrap bid-dvdms-table-wrap">
+  const tableBlock = `<div class="data-table-wrap bid-dvdms-table-wrap">
         ${headerBlock}
         ${renderCompactWfPeriodFilter('vendorDeliverySync', vendorDeliverySyncFilterState)}
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Delivery / Challan</th>
-              <th>PO / Tender</th>
-              <th>Category</th>
-              <th>Items</th>
-              <th>Status</th>
-              <th>GRN</th>
-              <th>Cold Chain</th>
-              <th>Dispatch</th>
-              <th>Delivered</th>
-            </tr>
-          </thead>
-          <tbody>${renderVendorDeliverySyncTableRows(paged.items)}</tbody>
-        </table>
-        ${renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setVendorDeliverySyncPage', { hideInfo: true })}
-      </div>`
-    : `<div class="data-table-wrap bid-dvdms-table-wrap">
-        ${headerBlock}
-        ${renderCompactWfPeriodFilter('vendorDeliverySync', vendorDeliverySyncFilterState)}
+        <div class="bid-dvdms-table-scroll">
+          <table class="data-table delivery-sync-table">
+            <thead>
+              <tr>
+                <th>Delivery / Challan</th>
+                <th>PO / Tender</th>
+                <th>Category</th>
+                <th>Items</th>
+                <th>Status</th>
+                <th>Delivered</th>
+              </tr>
+            </thead>
+            <tbody>${paged.items.length ? renderVendorDeliverySyncTableRows(paged.items) : filterEmptyRow}</tbody>
+          </table>
+        </div>
+        ${paged.items.length ? renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setVendorDeliverySyncPage', { hideInfo: true }) : ''}
       </div>`;
 
   return `<div class="need-api bid-dvdms-stage">
@@ -2027,7 +2559,7 @@ function renderVendorDeliverySyncStage(canEdit = true) {
       <div class="need-api-banner-icon"><i class="fa-solid fa-cloud-arrow-down"></i></div>
       <div class="need-api-banner-text">
         <strong>Delivery records</strong>
-        <p>Challan, dispatch, GRN and cold-chain status · Last synced <strong>${escapeHtmlLite(meta.lastSynced)}</strong></p>
+        <p>Challan, PO and delivery status · Last synced <strong>${escapeHtmlLite(meta.lastSynced)}</strong></p>
       </div>
       <div class="need-api-banner-actions">
         ${renderApiSyncBadge(meta.status === 'Syncing' ? 'Not synced' : meta.status)}
@@ -2038,17 +2570,231 @@ function renderVendorDeliverySyncStage(canEdit = true) {
     </div>
 
     ${emptyBlock}
-    ${tableBlock}
+    ${vendorDeliverySyncState.rows.length ? tableBlock : ''}
+  </div>`;
+}
 
-    <div class="wf-actions mt-2">
-      <button type="button" class="btn btn-outline" onclick="refreshVendorDeliverySyncApi()"${refreshDis}>
-        <i class="fa-solid fa-arrows-rotate"></i> Refresh
-      </button>
-      <button type="button" class="btn btn-primary" onclick="confirmVendorDeliverySync()"${(!canEdit || confirmed || !vendorDeliverySyncState.rows.length) ? ' disabled' : ''}>
-        <i class="fa-solid fa-check"></i> ${confirmed ? 'Delivery sync confirmed' : 'Confirm sync & continue'}
+const DELIVERY_UPDATE_TENDER_PLACEHOLDER = 'Select tender for this delivery…';
+
+const vendorDeliveryUpdateDraft = {
+  tenderId: '',
+  challan: '',
+  vehicle: '',
+  dispatchDate: '',
+  expectedDate: '',
+  remarks: '',
+  status: '',
+  coldChain: 'No',
+  ocrReady: false,
+  fileName: null
+};
+
+function resetVendorDeliveryUpdateDraft() {
+  Object.assign(vendorDeliveryUpdateDraft, {
+    tenderId: '',
+    challan: '',
+    vehicle: '',
+    dispatchDate: '',
+    expectedDate: '',
+    remarks: '',
+    status: '',
+    coldChain: 'No',
+    ocrReady: false,
+    fileName: null
+  });
+}
+
+function getVendorLifecycleTenderChoices() {
+  const map = new Map();
+  const push = (tenderId, title, category, poId) => {
+    if (!tenderId) return;
+    const prev = map.get(tenderId) || {};
+    map.set(tenderId, {
+      tenderId,
+      title: title || prev.title || tenderId,
+      category: category || prev.category || '—',
+      poId: poId || prev.poId || ''
+    });
+  };
+  getVendorContractTenderChoices().forEach(t => push(t.tenderId, t.title, t.category));
+  (vendorDeliverySyncState.rows || []).forEach(r => push(r.tenderId, r.title, r.category, r.poId));
+  (vendorAwardSyncState.rows || []).forEach(r => push(r.tenderId, r.title, r.category));
+  return Array.from(map.values());
+}
+
+function getVendorLifecycleTenderSelectOptions(placeholder) {
+  return [placeholder, ...getVendorLifecycleTenderChoices().map(t => `${t.tenderId} — ${t.title}`)];
+}
+
+function renderVendorDeliveryUpdateModalBody() {
+  const d = vendorDeliveryUpdateDraft;
+  const options = getVendorLifecycleTenderSelectOptions(DELIVERY_UPDATE_TENDER_PLACEHOLDER);
+  const selected = d.tenderId
+    ? (options.find(o => o.startsWith(`${d.tenderId} — `)) || DELIVERY_UPDATE_TENDER_PLACEHOLDER)
+    : DELIVERY_UPDATE_TENDER_PLACEHOLDER;
+  const hasTender = !!d.tenderId;
+  return `<div class="dvdms-detail vendor-update-modal">
+    <p class="dvdms-detail-note" style="margin-top:0">Select the tender first. Document upload unlocks after tender selection. Saving adds the delivery to your records table.</p>
+    <div class="form-group" style="margin-bottom:1rem">
+      <label>${reqLabel('Tender')}</label>
+      ${inlineCustomSelectHTML('deliveryUpdateTender', options, selected)}
+    </div>
+    <div class="ocr-panel">
+      <div class="ocr-panel-head">
+        <h4><i class="fa-solid fa-truck"></i> Delivery Details</h4>
+        <span class="badge ${d.ocrReady ? 'badge-info' : 'badge-muted'}">${d.ocrReady ? 'Ready — Review &amp; Save' : 'Awaiting upload'}</span>
+      </div>
+      <div class="label-grid">
+        ${ocrLabel('Delivery Challan No.', d.challan)}
+        ${ocrLabel('Dispatch Status', d.status ? `<span class="badge badge-info">${escapeHtmlLite(d.status)}</span>` : '', { html: true })}
+        ${ocrLabel('Vehicle / LR No.', d.vehicle)}
+        ${ocrLabel('Dispatch Date', d.dispatchDate)}
+        ${ocrLabel('Expected Delivery Date', d.expectedDate)}
+        ${ocrLabel('Remarks', d.remarks)}
+        ${ocrLabel('Uploaded Document', d.fileName || '')}
+      </div>
+      <div class="ocr-panel-control">
+        ${customSelectHTML('Cold Chain Required', 'deliveryUpdateColdChain', ['No', 'Yes'], d.coldChain || 'No', true)}
+      </div>
+    </div>
+    <div class="mt-2">
+      ${renderInlineUpload({
+        id: 'wfModalDeliveryUpload',
+        title: 'Upload Delivery Status Document',
+        hint: hasTender
+          ? 'Delivery challan / dispatch note · PDF / JPG — fills all delivery labels above'
+          : 'Select a tender above to enable upload',
+        disabled: !hasTender,
+        fileName: d.fileName,
+        onChange: 'handleDeliveryUpdateModalUpload'
+      })}
+    </div>
+    <div class="modal-inline-actions">
+      <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button type="button" class="btn btn-primary"${!hasTender || !d.ocrReady ? ' disabled' : ''} onclick="saveVendorDeliveryUpdateModal()">
+        <i class="fa-solid fa-check"></i> Save delivery
       </button>
     </div>
   </div>`;
+}
+
+function bindVendorDeliveryUpdateTenderSelect() {
+  const wrap = document.querySelector('#modalBody .custom-select[data-select-id="deliveryUpdateTender"]');
+  if (!wrap || wrap.dataset.deliveryUpdateBound) return;
+  wrap.dataset.deliveryUpdateBound = '1';
+  wrap.addEventListener('change', () => {
+    const label = typeof getCustomSelectValue === 'function' ? getCustomSelectValue('deliveryUpdateTender') : '';
+    const tenderId = (!label || label === DELIVERY_UPDATE_TENDER_PLACEHOLDER)
+      ? ''
+      : (label.split(' — ')[0] || '').trim();
+    vendorDeliveryUpdateDraft.tenderId = tenderId;
+    vendorDeliveryUpdateDraft.challan = '';
+    vendorDeliveryUpdateDraft.vehicle = '';
+    vendorDeliveryUpdateDraft.dispatchDate = '';
+    vendorDeliveryUpdateDraft.expectedDate = '';
+    vendorDeliveryUpdateDraft.remarks = '';
+    vendorDeliveryUpdateDraft.status = '';
+    vendorDeliveryUpdateDraft.ocrReady = false;
+    vendorDeliveryUpdateDraft.fileName = null;
+    openModal('Add / Update delivery', renderVendorDeliveryUpdateModalBody(), { wide: true, large: true, replace: true });
+    bindVendorDeliveryUpdateTenderSelect();
+  });
+}
+
+function openVendorDeliveryUpdateModal() {
+  ensureVendorDeliverySyncLoaded();
+  if (!(vendorDeliverySyncState.rows || []).length) {
+    showWfAlert('Synced delivery records are required before adding updates. Refresh the stage first.');
+    return;
+  }
+  if (!getVendorLifecycleTenderChoices().length) {
+    showWfAlert('No tenders are available to link. Complete award / contract selection first.');
+    return;
+  }
+  resetVendorDeliveryUpdateDraft();
+  openModal('Add / Update delivery', renderVendorDeliveryUpdateModalBody(), { wide: true, large: true });
+  bindVendorDeliveryUpdateTenderSelect();
+}
+
+function handleDeliveryUpdateModalUpload(input) {
+  if (!vendorDeliveryUpdateDraft.tenderId) {
+    showWfAlert('Select a tender before uploading the delivery document.');
+    if (input) input.value = '';
+    return;
+  }
+  const file = input?.files?.[0];
+  if (!file) return;
+  const cold = typeof getCustomSelectValue === 'function'
+    ? getCustomSelectValue('deliveryUpdateColdChain')
+    : vendorDeliveryUpdateDraft.coldChain;
+  const suffix = String(Date.now()).slice(-4);
+  simulateOcrDelay(() => {
+    Object.assign(vendorDeliveryUpdateDraft, {
+      challan: `CHL-2026-${suffix}`,
+      vehicle: 'MP-04-AB-2190 / LR-88912',
+      dispatchDate: formatDateDMY(APP_TODAY),
+      expectedDate: formatDateDMY(APP_TODAY),
+      remarks: 'Additional delivery consignment',
+      status: 'Dispatched',
+      coldChain: cold || 'No',
+      ocrReady: true,
+      fileName: file.name
+    });
+    openModal('Add / Update delivery', renderVendorDeliveryUpdateModalBody(), { wide: true, large: true, replace: true });
+    bindVendorDeliveryUpdateTenderSelect();
+  });
+}
+
+function saveVendorDeliveryUpdateModal() {
+  const d = vendorDeliveryUpdateDraft;
+  if (!d.tenderId) {
+    showWfAlert('Select a tender before saving.');
+    return;
+  }
+  if (!d.ocrReady) {
+    showWfAlert('Upload a Delivery Status document first so details can be populated.');
+    return;
+  }
+  const cold = typeof getCustomSelectValue === 'function'
+    ? getCustomSelectValue('deliveryUpdateColdChain')
+    : d.coldChain;
+  const choice = getVendorLifecycleTenderChoices().find(t => t.tenderId === d.tenderId) || {};
+  const contract = typeof getContractRecordForTender === 'function' ? getContractRecordForTender(d.tenderId) : null;
+  const n = (vendorDeliverySyncState.rows || []).length + 1;
+  const deliveryId = `DEL-2026-${String(4800 + n).padStart(4, '0')}`;
+  const row = {
+    deliveryId,
+    challan: d.challan || `CHL-2026-${String(4800 + n).padStart(4, '0')}`,
+    poId: choice.poId || contract?.poId || `PO-${String(d.tenderId).replace(/^TND-/, '')}`,
+    tenderId: d.tenderId,
+    title: choice.title || contract?.title || d.tenderId,
+    category: choice.category || contract?.category || '—',
+    items: d.remarks || choice.title || 'Delivery consignment',
+    qty: '—',
+    amount: contract?.value || '—',
+    vehicle: d.vehicle || '—',
+    dispatchDate: d.dispatchDate || formatDateDMY(APP_TODAY),
+    expectedDate: d.expectedDate || formatDateDMY(APP_TODAY),
+    deliveryDate: formatDateDMY(APP_TODAY),
+    status: d.status || 'Dispatched',
+    grn: 'Pending',
+    coldChain: cold || 'No',
+    invoice: '—',
+    payment: '—',
+    periodDate: formatDateDMY(APP_TODAY),
+    remarks: d.remarks || 'Vendor-uploaded delivery update',
+    fileName: d.fileName || null,
+    source: 'vendor-upload'
+  };
+  if (!Array.isArray(vendorStageState.deliveryLocalRows)) vendorStageState.deliveryLocalRows = [];
+  vendorStageState.deliveryLocalRows.push(row);
+  vendorDeliverySyncState.rows = [...(vendorDeliverySyncState.rows || []), row];
+  vendorStageState.delivery.updated = true;
+  if (!vendorStageState.completed?.[7]) completeVendorStage(7);
+  persistVendorLifecycle();
+  closeModal();
+  refreshWorkflowUI();
+  showWfAlert(`Delivery <strong>${escapeHtmlLite(deliveryId)}</strong> added for tender <strong>${escapeHtmlLite(d.tenderId)}</strong>.`, 'success');
 }
 
 function setVendorDeliverySyncPage(page) {
@@ -2167,6 +2913,7 @@ function openVendorDeliverySyncDetail(deliveryId) {
       yesHint: 'Articles included in this consignment / GRN',
       noHint: 'In category catalogue · not in this delivery lot',
       statusHead: 'Delivery status',
+      filterLabel: 'Delivery Status',
       headTitle: `${r.category || 'Category'} articles · delivery coverage`
     })}
     <div class="dvdms-detail-panel">
@@ -2178,7 +2925,7 @@ function openVendorDeliverySyncDetail(deliveryId) {
       </table>
     </div>
     <p class="dvdms-detail-note">${/delivered|accepted/i.test(r.status || '') || r.grn === 'Accepted'
-      ? 'This consignment is reflected in synced delivery records. Confirm sync on the stage to continue to Invoice Submission.'
+      ? 'This consignment is reflected in synced delivery records. You can continue to Invoice Submission.'
       : 'Dispatch is in progress. Refresh later for GRN and receipt updates.'}</p>
     <div class="modal-inline-actions">
       <button type="button" class="btn btn-primary" onclick="closeModal()"><i class="fa-solid fa-xmark"></i> Close</button>
@@ -2566,7 +3313,10 @@ function initGovLifecycleForSession(user) {
 
 function maskSensitiveValue(value) {
   if (!value) return '₹ ●●●';
-  return String(value).replace(/[\d.,]+/g, '●●●');
+  const raw = String(value).trim();
+  const unitMatch = raw.match(/\b(Cr|L|Lakh|Lakhs|Crore|Crores)\b/i);
+  const unit = unitMatch ? unitMatch[1] : '';
+  return unit ? `₹ ●●● ${unit}` : '₹ ●●●';
 }
 
 function reqLabel(text) {
@@ -2908,7 +3658,7 @@ function renderTopbar() {
     bids: ['Bid Submitted', 'Review synced bid records for open and awarded tenders'],
     clarifications: ['Clarifications', 'Pre-bid queries and corrigenda tracking'],
     contracts: currentRole === 'vendor'
-      ? ['Contracts & POs', 'Synced from Contract Management / DVDMS — same LOA, PBG, PO facts as RM']
+      ? ['Contracts & POs', 'Synced from Contract Management — same LOA, PBG, PO facts as RM']
       : ['Contracts & POs', 'Active contracts and purchase orders'],
     delivery: ['Delivery & Invoices', 'Dispatch tracking and invoice management'],
     performance: ['Performance Score', 'Your weighted performance metrics'],
@@ -3187,6 +3937,9 @@ function finishPageInit() {
   bindPageEvents();
   initCustomSelects();
   bindAnalyticsFilterControls();
+  if (currentPage === 'workflow' && currentRole === 'vendor' && currentWorkflowStep === 1) {
+    lockSyncedRegistrationSelects();
+  }
   if (currentPage === 'workflow' && currentRole === 'vendor' && currentWorkflowStep === 4) {
     bindVendorBidDvdmsCategorySelect();
   }
@@ -3208,6 +3961,9 @@ function finishPageInit() {
   }
   if (currentPage === 'workflow' && currentRole === 'vendor' && currentWorkflowStep === 10) {
     bindVendorRenewalExecCategorySelect();
+  }
+  if (currentPage === 'repository' && currentRole === 'vendor') {
+    bindVendorRepositoryFilters();
   }
   if (currentPage === 'workflow' && currentRole === 'gov') {
     scheduleStageSlaCheck(currentWorkflowStep);
@@ -3395,7 +4151,7 @@ function renderPerformanceBreakdown(vendor) {
         <h3>${vendor.name}</h3>
         <p class="perf-vendor-id"><i class="fa-solid fa-id-badge"></i> ${vendor.id}</p>
         <span class="badge badge-success"><i class="fa-solid fa-certificate"></i> ${vendor.status} Vendor</span>
-        <p class="perf-hero-desc">Weighted score across 5 evaluation parameters vs platform benchmark of ${BENCHMARK}.</p>
+        <p class="perf-hero-desc">Weighted score across ${metrics.length} evaluation parameters vs platform benchmark of ${BENCHMARK}.</p>
       </div>
     </div>
 
@@ -3422,7 +4178,7 @@ function renderPerformanceBreakdown(vendor) {
         <div class="score-summary-card">
           <span class="score-summary-icon"><i class="fa-solid fa-arrow-trend-up"></i></span>
           <div>
-            <span class="score-summary-value">${aboveCount}<small>/5</small></span>
+            <span class="score-summary-value">${aboveCount}<small>/${metrics.length}</small></span>
             <span class="score-summary-label">Metrics above benchmark</span>
           </div>
         </div>
@@ -3531,20 +4287,19 @@ function renderTenderPipeline(tenders) {
   return `<div class="data-table-wrap">
       <div class="table-header">
         <h3>Tender Details</h3>
-        <span class="meta-chip">${paged.total} tender${paged.total !== 1 ? 's' : ''}</span>
       </div>
       <table class="data-table">
         <thead><tr><th>S.No</th><th>Tender ID</th><th>Title</th><th>Category</th><th>Deadline</th><th>Status</th><th>Action</th></tr></thead>
         <tbody>
-          ${paged.items.length ? paged.items.map((t, i) => `<tr onclick="openDrillDown('tender','${t.id}','${t.title} - ${t.category}. Value: ${t.value}. Status: ${t.status}.')">
+          ${paged.items.length ? paged.items.map((t, i) => `<tr class="need-row-clickable" role="button" tabindex="0" onclick="openTenderDetail('${t.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTenderDetail('${t.id}')}">
             <td>${paged.from + i}</td>
             <td><strong>${t.id}</strong></td><td>${t.title}</td><td>${t.category}</td><td>${formatDateDMY(t.deadline)}</td>
             <td><span class="badge badge-${tenderBadgeClass(t.status)}">${t.status}</span></td>
-            <td><button class="btn btn-outline" style="padding:0.3rem 0.6rem;font-size:0.75rem">${pipelineActionLabel(t.status)}</button></td>
+            <td><button type="button" class="btn btn-outline" style="padding:0.3rem 0.6rem;font-size:0.75rem" onclick="event.stopPropagation();openTenderDetail('${t.id}')">${pipelineActionLabel(t.status)}</button></td>
           </tr>`).join('') : emptyTableRow(7, 'No tenders in pipeline for this category.')}
         </tbody>
       </table>
-      ${renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setPipelinePage')}
+      ${renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setPipelinePage', { hideInfo: true })}
     </div>`;
 }
 
@@ -3717,16 +4472,23 @@ function getAnalyticsScoreFactor() {
   return factor;
 }
 
+function computeVendorOverallScore(vendor) {
+  const metrics = typeof PERF_METRICS !== 'undefined' ? PERF_METRICS : [];
+  if (!metrics.length) return Number(vendor?.overall) || 0;
+  const totalW = metrics.reduce((s, m) => s + m.weight, 0) || 100;
+  const sum = metrics.reduce((s, m) => s + (Number(vendor?.[m.key]) || 0) * m.weight, 0);
+  return Math.round((sum / totalW) * 10) / 10;
+}
+
 function adjustVendorScores(vendor, factor) {
   if (factor === 1) return vendor;
   const adj = v => Math.min(100, Math.max(1, Math.round(v * factor * 10) / 10));
-  const quality = adj(vendor.quality);
-  const leadTime = adj(vendor.leadTime);
-  const cost = adj(vendor.cost);
-  const regulatory = adj(vendor.regulatory);
-  const satisfaction = adj(vendor.satisfaction);
-  const overall = Math.round(quality * 0.3 + leadTime * 0.2 + cost * 0.2 + regulatory * 0.2 + satisfaction * 0.1);
-  return { ...vendor, quality, leadTime, cost, regulatory, satisfaction, overall };
+  const next = { ...vendor };
+  (typeof PERF_METRICS !== 'undefined' ? PERF_METRICS : []).forEach(m => {
+    next[m.key] = adj(Number(vendor[m.key]) || 0);
+  });
+  next.overall = computeVendorOverallScore(next);
+  return next;
 }
 
 function getAnalyticsAdjustedVendors(vendors) {
@@ -3973,14 +4735,19 @@ function renderVendorDashboard() {
 }
 
 function renderVendorTableRows(vendors) {
+  const metrics = typeof PERF_METRICS !== 'undefined' ? PERF_METRICS : [];
+  const colSpan = 3 + metrics.length + 2;
   return vendors.length ? vendors.map(v => `<tr onclick="openVendorDetail('${v.id}')">
     <td><strong>${v.id}</strong></td>
     <td>${v.name}</td>
     <td>${v.category}</td>
-    ${[v.quality, v.leadTime, v.cost, v.regulatory, v.satisfaction].map(s => `<td><div class="score-bar"><div class="score-track"><div class="score-fill ${s >= 85 ? 'high' : s >= 70 ? 'mid' : 'low'}" style="width:${s}%"></div></div><span>${s}</span></div></td>`).join('')}
+    ${metrics.map(m => {
+      const s = Number(v[m.key]) || 0;
+      return `<td><div class="score-bar"><div class="score-track"><div class="score-fill ${s >= 85 ? 'high' : s >= 70 ? 'mid' : 'low'}" style="width:${s}%"></div></div><span>${s}</span></div></td>`;
+    }).join('')}
     <td><strong>${v.overall}</strong></td>
     <td><span class="badge badge-${v.status === 'Preferred' ? 'success' : v.status === 'Watch' ? 'danger' : 'info'}">${v.status}</span></td>
-  </tr>`).join('') : emptyTableRow(10);
+  </tr>`).join('') : emptyTableRow(colSpan);
 }
 
 function renderVendorTable(options = {}) {
@@ -3988,12 +4755,14 @@ function renderVendorTable(options = {}) {
   const vendors = getAnalyticsAdjustedVendors(filterByCategory(VENDORS));
   const paged = paginateItems(vendors, vendorMatrixPage, 10);
   vendorMatrixPage = paged.page;
+  const metrics = typeof PERF_METRICS !== 'undefined' ? PERF_METRICS : [];
+  const colSpan = 3 + metrics.length + 2;
   return `<div class="data-table-wrap"${tableId ? ` id="${tableId}"` : ''}>
-    <div class="table-header"><h3>Vendor Performance Matrix ${currentCategory !== 'All' ? `— ${currentCategory}` : ''}</h3>${showNavButton ? `<button class="btn btn-outline" onclick="navigateTo('vendor-matrix')">Full Matrix →</button>` : `<span class="meta-chip" style="margin:0"><strong>${paged.total}</strong> vendors</span>`}</div>
+    <div class="table-header"><h3>Vendor Performance Matrix ${currentCategory !== 'All' ? `— ${currentCategory}` : ''}</h3>${showNavButton ? `<button class="btn btn-outline" onclick="navigateTo('vendor-matrix')">Full Matrix →</button>` : ''}</div>
     <table class="data-table">
-      <thead><tr><th>Vendor ID</th><th>Name</th><th>Category</th><th>Quality</th><th>Lead Time</th><th>Cost</th><th>Regulatory</th><th>Satisfaction</th><th>Overall</th><th>Status</th></tr></thead>
+      <thead><tr><th>Vendor ID</th><th>Name</th><th>Category</th>${metrics.map(m => `<th>${escapeHtmlLite(m.label)}</th>`).join('')}<th>Overall</th><th>Status</th></tr></thead>
       <tbody>
-        ${paged.items.length ? renderVendorTableRows(paged.items) : emptyTableRow(10)}
+        ${paged.items.length ? renderVendorTableRows(paged.items) : emptyTableRow(colSpan)}
       </tbody>
     </table>
     ${renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setVendorMatrixPage')}
@@ -4125,11 +4894,11 @@ function isVendorStageActionComplete(stageId) {
   switch (stageId) {
     case 1: return !!s.completed[1];
     case 2: return !!s.completed[2] || (Array.isArray(s.uploads?.kyc) && s.uploads.kyc.length >= 1);
-    case 3: return !!s.completed[3] || !!s.uploads?.approvalLetter;
-    case 4: return !!s.completed[4] || !!s.bid.submitted;
-    case 5: return !!s.completed[5];
+    case 3: return !!s.completed[3] || !!s.uploads?.approvalLetter || hasSystemApprovalLetter();
+    case 4: return !!s.completed[4] || !!s.bid.submitted || !!(typeof vendorBidDvdmsState !== 'undefined' && vendorBidDvdmsState.rows?.length);
+    case 5: return !!s.completed[5] || !!s.award.acknowledged;
     case 6: return !!s.completed[6];
-    case 7: return !!s.completed[7] || !!s.delivery.updated;
+    case 7: return !!s.completed[7] || !!s.delivery.updated || (!!(typeof vendorDeliverySyncState !== 'undefined' && vendorDeliverySyncState.rows?.length) && !isManualVendorWithoutDeliveryHistory());
     case 8: return !!s.invoice.submitted;
     case 9: return true;
     case 10: return Array.isArray(s.renewalRequests) && s.renewalRequests.some(r => r.source === 'vendor');
@@ -4147,9 +4916,8 @@ function vendorCanAdvanceFrom(stageId) {
 function vendorCanEditStage(stepId, progress) {
   // Any stage you open is actionable — do not lock buttons because earlier stages are incomplete.
   // Only lock after irreversible submit within that stage.
+  // Delivery / Invoice stay editable so vendors can Add / Update later consignments & invoices.
   if (stepId === 4 && vendorStageState.bid.submitted) return false;
-  if (stepId === 8 && vendorStageState.invoice.submitted) return false;
-  if (stepId === 7 && vendorStageState.delivery.updated && stepId < progress) return false;
   return true;
 }
 
@@ -5257,7 +6025,7 @@ function renderIndentRaisedStage(canEdit = true) {
     <div class="need-section" style="margin-top:1rem">
       <div class="need-section-head">
         <h4><i class="fa-solid fa-list"></i> Indent List</h4>
-        <span class="meta-chip">${periodLabel} · ${rows.length} record(s)</span>
+        <span class="meta-chip">${periodLabel}</span>
       </div>
       <div class="data-table-wrap need-table">
         <table class="data-table">
@@ -5380,7 +6148,7 @@ function renderDemandConsolidationStage(canEdit = true) {
       return `<div class="need-section" style="margin-bottom:1.1rem">
         <div class="need-section-head">
           <h4><i class="fa-solid fa-clipboard-list"></i> Demand Approval List</h4>
-          <span class="meta-chip">${periodLabel} · ${demandRows.length} record(s)</span>
+          <span class="meta-chip">${periodLabel}</span>
         </div>
         <div class="data-table-wrap need-table">
           <table class="data-table">
@@ -5784,7 +6552,7 @@ function renderPrBudgetApprovalStage(canEdit = true) {
         <div class="budget-dept-stat"><span>Review / partial</span><strong>${reviewCount}</strong></div>
       </div>
       <div class="need-section-head" style="margin:0.75rem 0 0.5rem">
-        <span class="meta-chip">${periodLabel} · ${listRows.length} record(s)</span>
+        <span class="meta-chip">${periodLabel}</span>
       </div>
       <div class="data-table-wrap need-table">
         <table class="data-table">
@@ -10213,7 +10981,8 @@ function renderWorkflowDetail(step, canEdit = true) {
   if (currentRole === 'vendor' && step.id === 1) {
     const regCategories = getRegistrationCategories();
     const values = getVendorRegFormValues();
-    const blank = !isSeededDemoVendor() && !vendorStageState.completed?.[1];
+    const synced = isVendorRegistrationSynced();
+    const blank = !synced && !isSeededDemoVendor() && !vendorStageState.completed?.[1];
     const selectedCategories = normalizeRegCategories(values.categories || values.category)
       .filter(c => regCategories.includes(c));
     const districts = getRegistrationDistricts();
@@ -10221,10 +10990,13 @@ function renderWorkflowDetail(step, canEdit = true) {
     const districtSelected = values.district && districts.includes(values.district)
       ? values.district
       : (blank ? 'Select district' : (districts[0] || 'Bhopal'));
-    const fieldLock = canEdit ? '' : ' readonly';
+    const fieldLock = (!canEdit || synced) ? ' readonly' : '';
+    const note = synced
+      ? 'Registration details including empanelment fee were loaded from the system. <strong>Pending</strong> appears only when a required record is missing; otherwise status is <strong>Submitted</strong>.'
+      : 'New vendors enter company, registered address and empanelment fee here. Complete Online / Offline fee payment so status moves from <strong>Pending</strong> to <strong>Submitted</strong>, then save. You may select <strong>more than one category</strong>.';
     return `${blank ? renderVendorOnboardingEmptyState() : ''}
     <div class="wf-stage-note"><i class="fa-solid fa-circle-info"></i>
-      <div>Empanelment fee is paid on the <strong>DVDMS / NIC</strong> portal during registration. Enter company details here only — no fee payment is required in this system. You may select <strong>more than one category</strong>.</div>
+      <div>${note}</div>
     </div>
     <div class="form-grid wf-form-grid">
       <div class="form-group"><label>${reqLabel('Company Name')}</label><input id="wf-reg-company" type="text" placeholder="Enter registered company / firm name" value="${escapeHtmlLite(values.company)}"${fieldLock}></div>
@@ -10240,8 +11012,9 @@ function renderWorkflowDetail(step, canEdit = true) {
       ${customSelectHTML('State', 'regState', getRegistrationStates(), values.state || 'Madhya Pradesh', true)}
       <div class="form-group"><label>${reqLabel('PIN Code')}</label><input id="wf-reg-pin" type="text" inputmode="numeric" maxlength="6" placeholder="e.g. 462001" value="${escapeHtmlLite(values.pin)}"${fieldLock}></div>
     </div>
+    ${renderEmpanelmentFeeBlock(canEdit && !synced)}
     <div class="wf-actions mt-2">
-      <button class="btn btn-primary"${disabled} onclick="saveWorkflowStage(1)">Save Registration Details</button>
+      <button class="btn btn-primary"${disabled} onclick="saveWorkflowStage(1)">${synced ? 'Confirm Registration Details' : 'Save Registration Details'}</button>
     </div>`;
   }
 
@@ -10277,9 +11050,18 @@ function renderWorkflowDetail(step, canEdit = true) {
 
   if (currentRole === 'vendor' && step.id === 3) {
     const letter = vendorStageState.uploads.approvalLetter;
-    const approved = !!vendorStageState.completed[3] || !!letter || isSeededDemoVendor();
+    const systemLetter = hasSystemApprovalLetter();
+    const approved = !!vendorStageState.completed[3] || !!letter || systemLetter || isSeededDemoVendor();
     const vendorCode = authUser?.vendorId || '—';
-    const categoryLabel = vendorStageState.registration?.category || (isSeededDemoVendor() ? 'Drugs, Consumables' : '—');
+    const categoryLabel = vendorStageState.registration?.category
+      || formatRegCategories(vendorStageState.registration?.categories)
+      || (isSeededDemoVendor() ? 'Drugs, Consumables' : '—');
+    const approvedOn = systemLetter || isSeededDemoVendor()
+      ? (vendorStageState.approval?.approvedOn || '28-08-2026')
+      : (letter ? formatDateDMY(APP_TODAY) : '');
+    const letterStatus = renderApprovalLetterFileStatus(letter, systemLetter);
+    const uploadBtn = renderApprovalLetterActionButtons(canEdit, systemLetter, disabled);
+
     if (!approved && isBlankVendorOnboarding()) {
       return `${renderVendorOnboardingEmptyState({
         icon: 'fa-hourglass-half',
@@ -10294,27 +11076,27 @@ function renderWorkflowDetail(step, canEdit = true) {
         <div class="form-group"><label>Approving Authority</label><input type="text" value="—" readonly></div>
         <div class="form-group full"><label>Linked Categories</label><input type="text" value="${escapeHtmlLite(categoryLabel)}" readonly></div>
         <div class="form-group full"><label>${reqLabel('Approval Letter')}</label>
-          <div class="wf-file-status"><span class="text-muted">No approval letter uploaded yet</span></div>
+          ${letterStatus}
         </div>
       </div>
-      <div class="wf-actions mt-2">
-        <button class="btn btn-outline" onclick="navigateTo('registration')">Open Full Profile</button>
-        <button class="btn btn-primary"${disabled} onclick="openApprovalLetterUpload()">Upload Approval Letter</button>
+      <div class="wf-actions mt-2 approval-letter-actions">
+        <button type="button" class="btn btn-outline" onclick="navigateTo('registration')">Open Full Profile</button>
+        ${uploadBtn}
       </div>`;
     }
     return `<div class="form-grid wf-form-grid">
       <div class="form-group"><label>${reqLabel('Vendor Code')}</label><input type="text" value="${escapeHtmlLite(vendorCode)}" readonly></div>
       <div class="form-group"><label>Approval Status</label><span class="badge badge-success">Approved</span></div>
-      ${datePickerHTML('wf-approval-on', isSeededDemoVendor() ? '28-08-2026' : '', reqLabel('Approved On'), true)}
+      ${datePickerHTML('wf-approval-on', approvedOn, reqLabel('Approved On'), true)}
       <div class="form-group"><label>${reqLabel('Approving Authority')}</label><input type="text" value="Vendor Registry, MP Health" readonly></div>
       <div class="form-group full"><label>${reqLabel('Linked Categories')}</label><input type="text" value="${escapeHtmlLite(categoryLabel)}" readonly></div>
       <div class="form-group full"><label>${reqLabel('Approval Letter')}</label>
-        <div class="wf-file-status">${letter ? `<i class="fa-solid fa-file-pdf"></i> ${escapeHtmlLite(letter.name)} <span class="badge badge-success">Uploaded</span>` : '<span class="text-muted">No approval letter uploaded yet</span>'}</div>
+        ${letterStatus}
       </div>
     </div>
-    <div class="wf-actions mt-2">
-      <button class="btn btn-outline" onclick="navigateTo('registration')">Open Full Profile</button>
-      <button class="btn btn-primary"${disabled} onclick="openApprovalLetterUpload()">Upload Approval Letter</button>
+    <div class="wf-actions mt-2 approval-letter-actions">
+      <button type="button" class="btn btn-outline" onclick="navigateTo('registration')">Open Full Profile</button>
+      ${uploadBtn}
     </div>`;
   }
 
@@ -10331,90 +11113,15 @@ function renderWorkflowDetail(step, canEdit = true) {
   }
 
   if (currentRole === 'vendor' && step.id === 7) {
-    return renderVendorDeliverySyncStage(canEdit);
+    return renderVendorDeliveryStage(canEdit);
   }
 
   if (currentRole === 'vendor' && step.id === 8) {
-    const inv = vendorStageState.invoice;
-    const uploadDis = !canEdit || inv.submitted;
-    return `${renderVendorInvoiceExecTable()}
-    <div class="wf-stage-note mt-2"><i class="fa-solid fa-circle-info"></i>
-      <div>Attach delivery proof for the active invoice. Invoice labels below are always shown; Invoice Number, GRN, Amount, and Status are filled from the uploaded document.</div>
-    </div>
-    <div class="ocr-panel">
-      <div class="ocr-panel-head">
-        <h4><i class="fa-solid fa-file-invoice"></i> Invoice Details</h4>
-        <span class="badge ${inv.submitted ? 'badge-success' : inv.ocrReady ? 'badge-info' : 'badge-muted'}">${inv.submitted ? 'Submitted' : inv.ocrReady ? 'Ready — Review &amp; Save' : 'Awaiting upload'}</span>
-      </div>
-      <div class="label-grid">
-        ${ocrLabel('Invoice Number', inv.number)}
-        ${ocrLabel('GRN Reference', inv.grn)}
-        ${ocrLabel('Invoice Amount (₹)', inv.amount)}
-        ${ocrLabel('Invoice Status', inv.status ? `<span class="badge ${inv.submitted ? 'badge-success' : 'badge-info'}">${inv.status}</span>` : '', { html: true })}
-        ${ocrLabel('Delivery Proof Document', inv.fileName || vendorStageState.uploads.deliveryProof?.name || '')}
-      </div>
-    </div>
-    <div class="mt-2">
-      ${renderInlineUpload({
-        id: 'wfInlineInvoiceProof',
-        title: 'Attach Delivery Proof',
-        hint: 'Signed challan / GRN / acceptance proof · PDF / JPG — fills all invoice labels above',
-        disabled: uploadDis,
-        fileName: inv.fileName || vendorStageState.uploads.deliveryProof?.name,
-        onChange: 'handleInvoiceProofInlineUpload'
-      })}
-    </div>
-    ${!canEdit ? '<div class="wf-inline-alert wf-inline-alert--info mt-2"><i class="fa-solid fa-lock"></i><div><p>Complete earlier stages (especially Delivery) before submitting an invoice.</p></div></div>' : ''}
-    <div class="wf-actions mt-2">
-      <button class="btn btn-primary"${!canEdit || !inv.ocrReady || inv.submitted ? ' disabled' : ''} onclick="saveInvoiceOcr()">Save Invoice Details</button>
-    </div>`;
+    return renderVendorInvoiceStage(canEdit);
   }
 
   if (currentRole === 'vendor' && step.id === 9) {
-    const p = vendorStageState.payment;
-    const invDone = vendorStageState.invoice.submitted;
-    if (invDone) {
-      p.milestones[0].done = true;
-      p.status = p.status === 'Awaiting Processing' ? 'Under Verification' : p.status;
-      p.lastUpdate = p.lastUpdate === '—' ? formatDateDMY(APP_TODAY) : p.lastUpdate;
-    }
-    return `${renderVendorPaymentExecTable()}
-    <div class="payment-track mt-2">
-      <div class="payment-track-header">
-        <div>
-          <h4>Active payment progress</h4>
-          <p>Monitor invoice-to-payment status for your current submission</p>
-        </div>
-        <span class="badge badge-info">${p.status}</span>
-      </div>
-      <div class="payment-summary-grid">
-        <div class="payment-summary-card">
-          <span class="payment-summary-label">Bank Account</span>
-          <strong>${p.bank}</strong>
-        </div>
-        <div class="payment-summary-card">
-          <span class="payment-summary-label">Expected Timeline</span>
-          <strong>${p.timeline}</strong>
-        </div>
-        <div class="payment-summary-card">
-          <span class="payment-summary-label">Invoice</span>
-          <strong>${vendorStageState.invoice.number || '—'}</strong>
-        </div>
-        <div class="payment-summary-card">
-          <span class="payment-summary-label">Last Update</span>
-          <strong>${p.lastUpdate}</strong>
-        </div>
-      </div>
-      <ol class="payment-timeline">
-        ${p.milestones.map((m, i) => `<li class="${m.done ? 'done' : i === p.milestones.findIndex(x => !x.done) ? 'current' : ''}">
-          <span class="payment-tl-dot">${m.done ? '<i class="fa-solid fa-check"></i>' : (i + 1)}</span>
-          <span class="payment-tl-label">${m.label}</span>
-        </li>`).join('')}
-      </ol>
-      <div class="wf-actions mt-2">
-        <button class="btn btn-outline" onclick="refreshPaymentStatus()">Refresh Payment Status</button>
-      </div>
-    </div>`;
+    return renderVendorPaymentStage(canEdit);
   }
 
   if (currentRole === 'vendor' && step.id === 10) {
@@ -10457,6 +11164,14 @@ function validateVendorStageFields(stageId) {
     if (!company || !contactName || !gstin || !pan || !street || !city || !district || district === 'Select district' || !state || !pinOk || !categories.length) {
       return 'Please fill all mandatory fields marked with * (including Address Line 1, City, District, State, and a 6-digit PIN Code) before proceeding.';
     }
+    if (!isVendorRegistrationSynced()) {
+      ensureEmpanelmentState();
+      if (!isEmpanelmentSubmitted()) {
+        return 'Complete Empanelment fee payment (Online or Offline) so status is Submitted before saving registration details.';
+      }
+    } else if (!isEmpanelmentSubmitted()) {
+      return 'Empanelment fee is still Pending in the system. Registration cannot be confirmed until the fee record is present.';
+    }
   }
   if (stageId === 2) {
     if (!vendorStageState.uploads.kyc.length) {
@@ -10464,22 +11179,22 @@ function validateVendorStageFields(stageId) {
     }
   }
   if (stageId === 3) {
+    if (hasSystemApprovalLetter()) return '';
     if (!vendorStageState.uploads.approvalLetter) {
       return 'Please upload the Approval Letter using “Upload Approval Letter” before moving to Bid Submitted.';
     }
   }
   if (stageId === 4) {
-    if (!vendorStageState.bid.submitted && !vendorStageState.completed?.[4]) {
-      return 'Refresh bid details, then click “Confirm sync & continue” once records appear.';
+    if (!vendorStageState.bid.submitted && !vendorStageState.completed?.[4] && !(vendorBidDvdmsState.rows || []).length) {
+      return 'Refresh bid details so synced bid records appear before moving to Award Notification.';
     }
   }
   if (stageId === 5) {
     if (!vendorStageState.completed?.[5]) {
       const hasRowAck = (vendorAwardSyncState.rows || []).some(r => /acknowledged/i.test(r.acknowledgement));
       if (!vendorStageState.award.acknowledged && !hasRowAck) {
-        return 'Open an award row to Acknowledge LOA, then click “Confirm sync & continue”.';
+        return 'Open an award row and acknowledge the LOA before moving to Contract Execution.';
       }
-      return 'Click “Confirm sync & continue” to finish Award Notification.';
     }
   }
   if (stageId === 6) {
@@ -10500,13 +11215,21 @@ function validateVendorStageFields(stageId) {
     }
   }
   if (stageId === 7) {
-    if (!vendorStageState.delivery.updated && !vendorStageState.completed?.[7]) {
-      return 'Refresh delivery records, then click “Confirm sync & continue” once records appear.';
+    if (vendorStageState.delivery.updated || vendorStageState.completed?.[7]) return null;
+    if (shouldShowManualDeliveryUpload() || isManualVendorWithoutDeliveryHistory()) {
+      return 'Upload the Delivery Status document, review the details, set Cold Chain Required, then click Save Delivery Details to unlock the next stage.';
+    }
+    if (!(vendorDeliverySyncState.rows || []).length) {
+      return 'Refresh delivery records so synced consignments appear before moving to Invoice Submission.';
     }
   }
   if (stageId === 8) {
-    if (!vendorStageState.invoice.submitted) {
+    if (vendorStageState.invoice.submitted || vendorStageState.completed?.[8]) return null;
+    if (shouldShowManualInvoiceUpload() || isManualVendorWithoutDeliveryHistory()) {
       return 'Attach Delivery Proof, review invoice details, then click Save Invoice Details to open Payment Tracking.';
+    }
+    if (!getVendorInvoiceBaseRows().length) {
+      return 'Invoice records will appear here once available. Use Add / Update invoice after the first synced invoice is listed.';
     }
   }
   if (stageId === 10) {
@@ -10687,6 +11410,10 @@ function openKycDocumentForm() {
 }
 
 function openApprovalLetterUpload() {
+  if (hasSystemApprovalLetter()) {
+    showWfAlert('Approval letter is already available from the system. Use “Show uploaded Approval Letter” to view it.');
+    return;
+  }
   openModal('Upload Approval Letter', renderUploadModalBody({
     lead: 'Upload the vendor approval / code assignment letter issued by the department.',
     acceptNote: 'PDF only preferred · Max 10 MB',
@@ -10701,6 +11428,116 @@ function openApprovalLetterUpload() {
     persistVendorLifecycle();
     showWfAlert('Approval letter uploaded successfully. You can move to the next stage.', 'success');
   });
+}
+
+function hasSystemApprovalLetter() {
+  return isVendorRegistrationSynced() || !!vendorStageState.approval?.systemLetter;
+}
+
+function renderApprovalLetterFileStatus(letter, systemLetter = hasSystemApprovalLetter()) {
+  if (systemLetter) {
+    return `<div class="wf-file-status approval-letter-file">
+      <span class="approval-letter-file-meta"><i class="fa-solid fa-file-pdf"></i> Vendor Approval Letter</span>
+      <span class="badge badge-success">On file</span>
+    </div>`;
+  }
+  if (letter) {
+    return `<div class="wf-file-status approval-letter-file">
+      <span class="approval-letter-file-meta"><i class="fa-solid fa-file-pdf"></i> ${escapeHtmlLite(letter.name)}</span>
+      <span class="badge badge-success">Uploaded</span>
+    </div>`;
+  }
+  return `<div class="wf-file-status"><span class="text-muted">No approval letter uploaded yet</span></div>`;
+}
+
+function renderApprovalLetterActionButtons(canEdit, systemLetter = hasSystemApprovalLetter(), disabledAttr = '') {
+  if (systemLetter) {
+    return `<button type="button" class="btn btn-primary" disabled title="Approval letter is already available from the system">Upload Approval Letter</button>
+      <button type="button" class="btn-link approval-letter-show-link" onclick="openSystemApprovalLetterModal()">
+        <i class="fa-solid fa-eye"></i> Show uploaded Approval Letter
+      </button>`;
+  }
+  return `<button type="button" class="btn btn-primary"${canEdit ? disabledAttr : ' disabled'} onclick="openApprovalLetterUpload()">Upload Approval Letter</button>`;
+}
+
+function getVendorApprovalLetterContext() {
+  const r = vendorStageState.registration || {};
+  const categories = formatRegCategories(r.categories?.length ? r.categories : r.category)
+    || (isSeededDemoVendor() ? 'Drugs, Consumables' : '—');
+  return {
+    vendorCode: authUser?.vendorId || 'VND-MP-PENDING',
+    company: r.company || authUser?.organization || '—',
+    contactName: r.contactName || authUser?.name || '—',
+    gstin: r.gstin || '—',
+    pan: r.pan || '—',
+    categories,
+    address: formatRegAddress(r) || '—',
+    approvedOn: vendorStageState.approval?.approvedOn || '28-08-2026',
+    authority: 'Vendor Registry, Department of Public Health & Family Welfare / MPPHSCL',
+    letterNo: vendorStageState.approval?.letterNo || `VAL/${new Date().getFullYear()}/${String(authUser?.vendorId || '000').slice(-4) || '0142'}`
+  };
+}
+
+function renderSystemApprovalLetterDocument() {
+  const ctx = getVendorApprovalLetterContext();
+  return `<div class="approval-letter-modal">
+    <div class="approval-letter-toolbar">
+      <div>
+        <strong>Official approval letter</strong>
+        <span>Generated from the system vendor-approval template</span>
+      </div>
+      <button type="button" class="btn btn-outline btn-sm" onclick="closeModal()"><i class="fa-solid fa-xmark"></i> Close</button>
+    </div>
+    <div class="approval-letter-sheet" id="vendorApprovalLetterSheet">
+      <header class="approval-letter-head">
+        <div>
+          <p class="approval-letter-brand">MPPHSCL</p>
+          <p class="approval-letter-brand-sub">Madhya Pradesh Public Health Services Corporation Limited</p>
+          <p class="approval-letter-office">First Floor, MP Oil Fed Premises, 01 Arera Hills, Bhopal 462011 (M.P.)</p>
+        </div>
+        <div class="approval-letter-docmeta">
+          <span class="badge badge-info">System template</span>
+          <p>Letter No. <strong>${escapeHtmlLite(ctx.letterNo)}</strong></p>
+          <p>Date <strong>${escapeHtmlLite(ctx.approvedOn)}</strong></p>
+        </div>
+      </header>
+      <h2 class="approval-letter-title">Vendor Empanelment / Code Assignment — Approval Letter</h2>
+      <p class="approval-letter-to">To,<br><strong>${escapeHtmlLite(ctx.company)}</strong><br>${escapeHtmlLite(ctx.address)}</p>
+      <p class="approval-letter-subject"><strong>Subject:</strong> Approval of vendor registration and assignment of Vendor Code <strong>${escapeHtmlLite(ctx.vendorCode)}</strong></p>
+      <p>Madam / Sir,</p>
+      <p>With reference to your online registration and KYC submission, the Vendor Registry has examined the particulars furnished by your organisation. After due verification, your firm is hereby <strong>approved</strong> for participation in procurement processes under MPPHSCL for the linked categories stated below.</p>
+      <div class="approval-letter-facts">
+        <div><span>Vendor Code</span><strong>${escapeHtmlLite(ctx.vendorCode)}</strong></div>
+        <div><span>Authorised Signatory</span><strong>${escapeHtmlLite(ctx.contactName)}</strong></div>
+        <div><span>GSTIN</span><strong>${escapeHtmlLite(ctx.gstin)}</strong></div>
+        <div><span>PAN</span><strong>${escapeHtmlLite(ctx.pan)}</strong></div>
+        <div class="is-wide"><span>Approved Categories</span><strong>${escapeHtmlLite(ctx.categories)}</strong></div>
+        <div class="is-wide"><span>Approving Authority</span><strong>${escapeHtmlLite(ctx.authority)}</strong></div>
+      </div>
+      <p>This approval letter is system-generated from the official vendor approval template and may be produced as documentary evidence for Bid-to-Pay lifecycle stages. The vendor shall continue to comply with empanelment conditions, licence validity, and contractual obligations as applicable.</p>
+      <p>Yours faithfully,</p>
+      <div class="approval-letter-sign">
+        <strong>Vendor Registry</strong>
+        <span>MPPHSCL / DoPHFW</span>
+        <span>Digitally issued · ${escapeHtmlLite(ctx.approvedOn)}</span>
+      </div>
+      <footer class="approval-letter-foot">
+        This is a computer-generated approval letter from the procurement system template. Verify vendor code against the live register before award / contract execution.
+      </footer>
+    </div>
+  </div>`;
+}
+
+function openSystemApprovalLetterModal() {
+  if (!hasSystemApprovalLetter()) {
+    showWfAlert('No system approval letter is on file. Please upload the approval letter issued by the department.');
+    return;
+  }
+  if (!vendorStageState.completed?.[3]) {
+    completeVendorStage(3);
+    persistVendorLifecycle();
+  }
+  openModal('Approval Letter', renderSystemApprovalLetterDocument(), { wide: true, large: true });
 }
 
 function openTechDocUpload() {
@@ -10886,16 +11723,18 @@ function acknowledgeLoa() {
   const already = (vendorAwardSyncState.rows || []).find(r => /acknowledged/i.test(r.acknowledgement));
   if (already) {
     vendorStageState.award.acknowledged = true;
+    if (!vendorStageState.completed?.[5]) completeVendorStage(5);
     persistVendorLifecycle();
-    showWfAlert('LOA already acknowledged. Click “Confirm sync & continue” to proceed.', 'success');
+    showWfAlert('LOA already acknowledged. You can proceed to Contract Execution.', 'success');
     refreshWorkflowUI();
     return;
   }
   vendorStageState.award.acknowledged = true;
   vendorStageState.contract.pbgStatus = '';
   vendorStageState.contract.contractStatus = '';
+  if (!vendorStageState.completed?.[5]) completeVendorStage(5);
   persistVendorLifecycle();
-  showWfAlert('LOA acknowledged. Click “Confirm sync & continue” to proceed.', 'success');
+  showWfAlert('LOA acknowledged. You can proceed to Contract Execution.', 'success');
   refreshWorkflowUI();
 }
 
@@ -11544,6 +12383,7 @@ function handleDeliveryInlineUpload(input) {
       updated: false,
       fileName: file.name
     };
+    persistVendorLifecycle();
     showWfAlert('Delivery status document processed. Review the details, set Cold Chain if needed, then Save.', 'success');
   });
 }
@@ -11558,6 +12398,7 @@ function saveDeliveryOcr() {
   d.coldChain = cold || 'No';
   d.updated = true;
   completeVendorStage(7);
+  persistVendorLifecycle();
   showWfAlert('Delivery details saved. You may proceed to Invoice Submission.', 'success');
   refreshWorkflowUI();
 }
@@ -11593,29 +12434,13 @@ function saveInvoiceOcr() {
   vendorStageState.payment.status = 'Under Verification';
   vendorStageState.payment.lastUpdate = formatDateDMY(APP_TODAY);
   completeVendorStage(8);
+  persistVendorLifecycle();
   showWfAlert('Invoice details saved. Payment Tracking is now available.', 'success');
   refreshWorkflowUI();
 }
 
 function refreshPaymentStatus() {
-  const p = vendorStageState.payment;
-  if (vendorStageState.invoice.submitted) {
-    p.milestones[0].done = true;
-    if (!p.milestones[1].done) {
-      p.milestones[1].done = true;
-      p.status = 'Finance Verification';
-    } else if (!p.milestones[2].done) {
-      p.milestones[2].done = true;
-      p.status = 'Approved for Payment';
-    } else {
-      p.milestones[3].done = true;
-      p.status = 'Paid';
-      completeVendorStage(9);
-    }
-    p.lastUpdate = formatDateDMY(APP_TODAY);
-  }
-  showWfAlert(`Payment status refreshed: ${p.status}`, 'success');
-  refreshWorkflowUI();
+  refreshVendorPaymentSyncApi();
 }
 
 function openWorkflowDocument(docId) {
@@ -11673,7 +12498,14 @@ function openModal(title, bodyHtml, options = {}) {
   }
 
   if (titleEl) titleEl.textContent = title;
-  if (bodyEl) bodyEl.innerHTML = bodyHtml;
+  if (bodyEl) {
+    bodyEl.innerHTML = bodyHtml;
+    // History restore serializes data-bound; clear so selects re-init with fresh listeners.
+    bodyEl.querySelectorAll('.custom-select').forEach(el => {
+      delete el.dataset.bound;
+      delete el.dataset.reportCatBound;
+    });
+  }
   modal?.classList.toggle('modal--wide', !!options.wide);
   modal?.classList.toggle('modal--lg', !!options.large);
   modal?.classList.toggle('modal--xl', !!options.extraWide);
@@ -11687,6 +12519,12 @@ function openModal(title, bodyHtml, options = {}) {
       el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     });
   }
+
+  if (typeof initCustomSelects === 'function') initCustomSelects();
+  bindArticleCoverageStatusFilter();
+  if (typeof bindVendorDeliveryUpdateTenderSelect === 'function') bindVendorDeliveryUpdateTenderSelect();
+  if (typeof bindVendorInvoiceUpdateTenderSelect === 'function') bindVendorInvoiceUpdateTenderSelect();
+  if (typeof bindVendorReportDetailCategorySelect === 'function') bindVendorReportDetailCategorySelect();
 }
 
 function modalGoBack() {
@@ -12007,13 +12845,16 @@ function refreshWorkflowUI() {
   if (detail) {
     detail.innerHTML = renderWorkflowDetailPanel(step, progress, total);
     initCustomSelects();
+    if (currentRole === 'vendor' && step.id === 1) lockSyncedRegistrationSelects();
     if (currentRole === 'vendor' && step.id === 4) bindVendorBidDvdmsCategorySelect();
     if (currentRole === 'vendor' && step.id === 5) bindVendorAwardSyncCategorySelect();
     if (currentRole === 'vendor' && step.id === 6) {
       bindContractTenderSelectListener();
       bindVendorContractExecCategorySelect();
     }
-    if (currentRole === 'vendor' && step.id === 7) bindVendorDeliverySyncCategorySelect();
+    if (currentRole === 'vendor' && step.id === 7) {
+      if (!shouldShowManualDeliveryUpload()) bindVendorDeliverySyncCategorySelect();
+    }
     if (currentRole === 'vendor' && step.id === 8) bindVendorInvoiceExecCategorySelect();
     if (currentRole === 'vendor' && step.id === 9) bindVendorPaymentExecCategorySelect();
     if (currentRole === 'vendor' && step.id === 10) bindVendorRenewalExecCategorySelect();
@@ -12031,7 +12872,6 @@ function renderVendorReg() {
   return `<div class="data-table-wrap">
       <div class="table-header">
         <h3>Registration Requests</h3>
-        <span class="meta-chip" style="margin:0"><strong>${paged.total}</strong> shown</span>
       </div>
       <table class="data-table">
         <thead><tr><th>Request ID</th><th>Company Name</th><th>Category</th><th>Empanelment Fee</th><th>KYC Status</th><th>Documents</th><th>Submitted</th><th>Action</th></tr></thead>
@@ -12103,13 +12943,155 @@ function getLinkedItemsForTender(tender) {
     return tokens.some(tok => title.includes(tok)) || title.includes(name.split(' ')[0].toLowerCase());
   });
   if (matched.length) return matched;
-  // Fall back to items whose spend matches tender value
   const byValue = items.filter(i => i.spend === tender.value);
-  return byValue.length ? byValue : items.slice(0, 2);
+  return byValue.length ? byValue : items.slice(0, Math.min(4, items.length));
+}
+
+function getTenderScopeItemNames(tender) {
+  const fromLifecycle = resolveLifecycleCoveredItems({
+    tenderId: tender?.id,
+    category: tender?.category,
+    coveredItems: tender?.coveredItems || tender?.scopeItems
+  });
+  if (fromLifecycle.length) return fromLifecycle;
+  return getLinkedItemsForTender(tender).map(i => i.name);
 }
 
 function getBidForTender(tenderId) {
   return typeof BIDS !== 'undefined' ? BIDS.find(b => b.tenderId === tenderId) : null;
+}
+
+function openTenderDetail(tenderId) {
+  const t = TENDERS.find(x => x.id === tenderId);
+  if (!t) {
+    openModal(tenderId, '<p>Tender record not found.</p>');
+    return;
+  }
+
+  const isOpen = t.status === 'Open';
+  const daysLeft = daysUntilDeadline(t.deadline);
+  const emdEstimate = t.category === 'Drugs' ? '₹3,20,000' : t.category === 'Equipment' ? '₹2,50,000' : '₹1,00,000';
+  const scopeNames = getTenderScopeItemNames(t);
+  const bid = getBidForTender(t.id);
+  const clarifs = typeof CLARIFICATIONS !== 'undefined'
+    ? CLARIFICATIONS.filter(c => c.tenderId === t.id)
+    : [];
+  const itemWise = categoryUsesItemWiseDetail(t.category);
+  const coverageRow = {
+    category: t.category,
+    tenderId: t.id,
+    value: t.value,
+    coveredItems: scopeNames,
+    categoryScope: `This ${t.category} tender is managed at category level. Line-item article schedules are not published for Services / Others packages.`
+  };
+
+  const deadlineLabel = !isOpen
+    ? 'Not open for bidding'
+    : daysLeft === null
+      ? '—'
+      : daysLeft > 0
+        ? `${daysLeft} day(s) remaining`
+        : daysLeft === 0
+          ? 'Due today'
+          : 'Deadline passed';
+
+  const techStatus = bid?.technical || (t.status === 'Evaluation' ? 'Under review' : (isOpen ? 'Open' : '—'));
+  const finStatus = bid?.financial || (isOpen ? 'Sealed' : '—');
+
+  const rows = [
+    ['Tender ID', t.id],
+    ['Title', t.title || '—'],
+    ['Category', t.category || '—'],
+    ['Detail type', itemWise ? 'Item-wise' : 'Category-wise'],
+    ['Est. value', t.value || '—'],
+    ['Bids received', String(t.bids ?? '—')],
+    ['Bid deadline', formatDateDMY(t.deadline)],
+    ['Status', t.status || '—'],
+    ['Technical', techStatus],
+    ['Commercial', finStatus],
+    ['Indicative EMD', emdEstimate]
+  ];
+  if (itemWise) {
+    const cov = getLifecycleArticleCoverage(coverageRow);
+    rows.push(['Articles in scope', `${cov.coveredCount} of ${cov.total}`]);
+  }
+
+  openModal(`${escapeHtmlLite(t.id)} — Tender details`, `<div class="dvdms-detail">
+    <div class="dvdms-detail-banner">
+      <div>
+        <p class="dvdms-detail-eyebrow">MPPHSCL · Tender details</p>
+        <h3>${escapeHtmlLite(t.title || 'Tender')}</h3>
+        <p>${escapeHtmlLite(t.id)} · ${escapeHtmlLite(t.category || '—')}</p>
+      </div>
+      <span class="badge badge-${tenderBadgeClass(t.status)}">${escapeHtmlLite(t.status || '—')}</span>
+    </div>
+    <div class="dvdms-detail-stats">
+      <div class="dvdms-detail-stat"><span>Est. value</span><strong>${escapeHtmlLite(t.value || '—')}</strong></div>
+      <div class="dvdms-detail-stat"><span>Bids</span><strong>${escapeHtmlLite(String(t.bids ?? '—'))}</strong></div>
+      <div class="dvdms-detail-stat"><span>Deadline</span><strong>${escapeHtmlLite(formatDateDMY(t.deadline))}</strong></div>
+      <div class="dvdms-detail-stat"><span>Countdown</span><strong>${escapeHtmlLite(deadlineLabel)}</strong></div>
+    </div>
+    <div class="dvdms-detail-stats">
+      <div class="dvdms-detail-stat"><span>Technical</span><strong>${escapeHtmlLite(techStatus)}</strong></div>
+      <div class="dvdms-detail-stat"><span>Commercial</span><strong>${escapeHtmlLite(finStatus)}</strong></div>
+      <div class="dvdms-detail-stat"><span>EMD (indicative)</span><strong>${escapeHtmlLite(emdEstimate)}</strong></div>
+      <div class="dvdms-detail-stat"><span>Category</span><strong>${escapeHtmlLite(t.category || '—')}</strong></div>
+    </div>
+    ${renderLifecycleCoverageBlock(coverageRow, {
+      stageTitle: `${t.category || 'Category'} · category-wise tender`,
+      noun: 'tender',
+      yesLabel: 'In scope',
+      noLabel: 'Not in scope',
+      yesHint: 'Articles covered under this tender schedule',
+      noHint: 'In category catalogue · not part of this tender',
+      statusHead: 'Tender scope',
+      filterLabel: 'Tender Status',
+      headTitle: `${t.category || 'Category'} articles · tender coverage`
+    })}
+    <div class="dvdms-detail-panel">
+      <div class="dvdms-detail-panel-head">Tender summary</div>
+      <table class="dvdms-detail-table">
+        <tbody>
+          ${rows.map(([k, v]) => `<tr><th scope="row">${escapeHtmlLite(k)}</th><td>${escapeHtmlLite(v)}</td></tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div class="dvdms-detail-panel">
+      <div class="dvdms-detail-panel-head">Key requirements</div>
+      <ul class="tender-req-list" style="margin:0.85rem 1rem 1rem;padding-left:1.1rem">
+        <li>Valid GSTIN, PAN, and category licenses</li>
+        <li>Technical compliance matrix mapped to NIT/RFP</li>
+        <li>Sealed commercial bid (opened only after technical qualification)</li>
+        <li>EMD approximately <strong>${escapeHtmlLite(emdEstimate)}</strong> (as per NIT)</li>
+      </ul>
+    </div>
+    ${clarifs.length ? `<div class="dvdms-detail-panel">
+      <div class="dvdms-detail-panel-head">Clarifications</div>
+      <div class="data-table-wrap bid-article-table-wrap" style="max-height:12rem">
+        <table class="data-table data-table--modal">
+          <thead><tr><th>#</th><th>Query</th><th>Subject</th><th>Status</th></tr></thead>
+          <tbody>
+            ${clarifs.map((c, i) => `<tr>
+              <td>${i + 1}</td>
+              <td><strong>${escapeHtmlLite(c.id)}</strong></td>
+              <td>${escapeHtmlLite(c.subject)}</td>
+              <td><span class="badge badge-${c.status === 'Answered' ? 'success' : c.status === 'Pending' ? 'warning' : 'info'}">${escapeHtmlLite(c.status)}</span></td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>` : ''}
+    <p class="dvdms-detail-note">${isOpen
+      ? 'This tender is open for bidding. Review article scope, eligibility and EMD before submitting your pack.'
+      : t.status === 'Evaluation'
+        ? 'Bidding is closed. Technical / commercial evaluation is in progress.'
+        : t.status === 'Awarded'
+          ? 'This tender has been awarded. Check Award Notification / Contracts for LOA and execution status.'
+          : 'Review tender requirements and timelines before proceeding.'}</p>
+    <div class="modal-inline-actions">
+      <button type="button" class="btn btn-primary" onclick="closeModal()"><i class="fa-solid fa-xmark"></i> Close</button>
+    </div>
+  </div>`, { wide: true, large: true });
 }
 
 function renderSourcing() {
@@ -12561,14 +13543,14 @@ function renderGovReports() {
       </div>
       <div class="data-table-wrap mt-2">
         <table class="data-table" id="tblGovVendors">
-          <thead><tr><th>Vendor ID</th><th>Name</th><th>Category</th><th>Quality</th><th>Lead Time</th><th>Cost</th><th>Regulatory</th><th>Satisfaction</th><th>Overall</th><th>Status</th></tr></thead>
+          <thead><tr><th>Vendor ID</th><th>Name</th><th>Category</th>${PERF_METRICS.map(m => `<th>${m.label}</th>`).join('')}<th>Overall</th><th>Status</th></tr></thead>
           <tbody>
             ${ds.vendors.length ? ds.vendors.map(v => `<tr>
               <td><strong>${v.id}</strong></td><td>${v.name}</td><td>${v.category}</td>
-              <td>${v.quality}</td><td>${v.leadTime}</td><td>${v.cost}</td><td>${v.regulatory}</td><td>${v.satisfaction}</td>
+              ${PERF_METRICS.map(m => `<td>${v[m.key] ?? '—'}</td>`).join('')}
               <td><strong>${v.overall}</strong></td>
               <td><span class="badge badge-${v.status === 'Preferred' ? 'success' : v.status === 'Watch' ? 'danger' : 'info'}">${v.status}</span></td>
-            </tr>`).join('') : emptyTableRow(10)}
+            </tr>`).join('') : emptyTableRow(3 + PERF_METRICS.length + 2)}
           </tbody>
         </table>
       </div>
@@ -12615,10 +13597,6 @@ function renderVendorReports() {
       <div>
         <p class="report-toolbar-lead">Vendor analytics for <strong>${ds.vendor?.name || 'MediSupply India Pvt Ltd'}</strong> · ${ds.category === 'All' ? 'All categories' : ds.category}</p>
         <p class="report-toolbar-meta">Generated ${formatDateDMY(APP_TODAY)} · VND-MP-000123</p>
-      </div>
-      <div class="report-toolbar-actions">
-        <button type="button" class="btn btn-outline" onclick="downloadVendorReportPack('excel')"><i class="fa-solid fa-file-excel"></i> Excel Pack</button>
-        <button type="button" class="btn btn-primary" onclick="downloadVendorReportPack('pdf')"><i class="fa-solid fa-file-pdf"></i> PDF Pack</button>
       </div>
     </div>
 
@@ -12775,27 +13753,71 @@ function renderVendorReports() {
 
 /** Pagination state for My Reports detail modals */
 let vendorReportDetailPage = 1;
-let vendorReportDetailCtx = { type: 'kpi', key: 'tenders', filter: null };
+let vendorReportDetailCtx = { type: 'kpi', key: 'tenders', filter: null, category: 'all' };
 
 function openVendorReportKpiDetail(kind) {
   vendorReportDetailPage = 1;
-  vendorReportDetailCtx = { type: 'kpi', key: kind, filter: null };
+  vendorReportDetailCtx = { type: 'kpi', key: kind, filter: null, category: 'all' };
   renderVendorReportDetailModal();
 }
 
 function openVendorReportChartDetail(chartKey, status) {
   if (!status || status === 'No bids') return;
   vendorReportDetailPage = 1;
-  vendorReportDetailCtx = { type: 'chart', key: chartKey, filter: status };
+  vendorReportDetailCtx = { type: 'chart', key: chartKey, filter: status, category: 'all' };
   renderVendorReportDetailModal();
 }
 
 function setVendorReportDetailPage(page) {
   vendorReportDetailPage = Math.max(1, Number(page) || 1);
-  renderVendorReportDetailModal();
+  renderVendorReportDetailModal(true);
 }
 
-function renderVendorReportDetailModal() {
+function setVendorReportDetailCategory(label) {
+  vendorReportDetailCtx.category = (!label || label === 'All categories') ? 'all' : label;
+  vendorReportDetailPage = 1;
+  renderVendorReportDetailModal(true);
+}
+
+function bindVendorReportDetailCategorySelect() {
+  const wrap = document.querySelector('#modalBody .custom-select[data-select-id="vendorReportDetailCategory"]');
+  if (!wrap || wrap.dataset.reportCatBound) return;
+  wrap.dataset.reportCatBound = '1';
+  wrap.addEventListener('change', () => {
+    const label = typeof getCustomSelectValue === 'function'
+      ? getCustomSelectValue('vendorReportDetailCategory')
+      : '';
+    setVendorReportDetailCategory(label);
+  });
+}
+
+function getVendorReportDetailCategoryOptions(list) {
+  const cats = [...new Set((list || []).map(r => r.category).filter(Boolean))];
+  const fixed = typeof CATEGORIES !== 'undefined'
+    ? CATEGORIES.filter(c => c && c !== 'All')
+    : ['Drugs', 'Equipment', 'Services', 'Consumables', 'Others'];
+  const merged = [...new Set([...fixed, ...cats])];
+  return ['All categories', ...merged];
+}
+
+function applyVendorReportDetailCategory(list) {
+  const cat = vendorReportDetailCtx.category;
+  if (!cat || cat === 'all') return list || [];
+  return (list || []).filter(r => r.category === cat);
+}
+
+function renderVendorReportDetailCategoryFilter(sourceList) {
+  const options = getVendorReportDetailCategoryOptions(sourceList);
+  const selected = vendorReportDetailCtx.category === 'all'
+    ? 'All categories'
+    : vendorReportDetailCtx.category;
+  return `<div class="vendor-report-detail-filter" title="Filter by category">
+    <span class="vendor-report-detail-filter-label">Category</span>
+    ${inlineCustomSelectHTML('vendorReportDetailCategory', options, selected)}
+  </div>`;
+}
+
+function renderVendorReportDetailModal(replace = false) {
   const ds = getVendorReportDataset();
   const { type, key, filter } = vendorReportDetailCtx;
   let title = 'Details';
@@ -12803,54 +13825,76 @@ function renderVendorReportDetailModal() {
   let thead = '';
   let rows = [];
   let colCount = 1;
+  let sourceForCategory = [];
+  let showCategoryFilter = false;
 
   if (key === 'tenders' || (type === 'chart' && key === 'tender')) {
-    const list = filter ? ds.tenders.filter(t => t.status === filter) : ds.tenders;
+    sourceForCategory = ds.tenders;
+    showCategoryFilter = true;
+    let list = filter ? ds.tenders.filter(t => t.status === filter) : ds.tenders.slice();
+    list = applyVendorReportDetailCategory(list);
     title = filter ? `Tenders — ${filter}` : 'Tenders Visible';
-    lead = `${list.length} tender(s)${ds.category !== 'All' ? ` in ${ds.category}` : ''}. Click a row for tender discovery details.`;
+    lead = `${list.length} tender(s)${vendorReportDetailCtx.category !== 'all' ? ` in ${vendorReportDetailCtx.category}` : (ds.category !== 'All' ? ` in ${ds.category}` : '')}. Click a row for tender discovery details.`;
     thead = '<tr><th>Tender ID</th><th>Title</th><th>Category</th><th>Value</th><th>Bids</th><th>Deadline</th><th>Status</th></tr>';
     colCount = 7;
     rows = list.map(t => ({
       id: t.id,
       html: `<tr class="need-row-clickable" role="button" tabindex="0" onclick="openTenderDetail('${t.id}')">
-        <td><strong>${t.id}</strong></td><td>${t.title}</td><td>${t.category}</td>
-        <td class="cell-nowrap">${t.value}</td><td>${t.bids ?? '—'}</td>
+        <td class="cell-id"><strong>${escapeHtmlLite(t.id)}</strong></td>
+        <td class="cell-title">${escapeHtmlLite(t.title || '—')}</td>
+        <td>${escapeHtmlLite(t.category || '—')}</td>
+        <td class="cell-nowrap">${escapeHtmlLite(t.value || '—')}</td>
+        <td>${t.bids ?? '—'}</td>
         <td class="cell-date">${formatDateDMY(t.deadline)}</td>
-        <td><span class="badge badge-${tenderBadgeClass(t.status)}">${t.status}</span></td>
+        <td class="cell-status"><span class="badge badge-${tenderBadgeClass(t.status)}">${escapeHtmlLite(t.status || '—')}</span></td>
       </tr>`
     }));
   } else if (key === 'bids' || (type === 'chart' && key === 'bid')) {
-    const list = filter ? ds.bids.filter(b => b.status === filter) : ds.bids;
+    sourceForCategory = ds.bids;
+    showCategoryFilter = true;
+    let list = filter ? ds.bids.filter(b => b.status === filter) : ds.bids.slice();
+    list = applyVendorReportDetailCategory(list);
     title = filter ? `Bids — ${filter}` : 'Bid submissions';
     lead = filter
-      ? `${list.length} bid(s) with status “${filter}”.`
-      : `${list.filter(b => b.status !== 'Draft').length} submitted · ${list.filter(b => b.status === 'Draft').length} draft.`;
+      ? `${list.length} bid(s) with status “${filter}”. Click a row for bid details.`
+      : `${list.filter(b => b.status !== 'Draft').length} submitted · ${list.filter(b => b.status === 'Draft').length} draft. Click a row for bid details.`;
     thead = '<tr><th>Tender</th><th>Category</th><th>Technical</th><th>Financial</th><th>EMD</th><th>Deadline</th><th>Status</th></tr>';
     colCount = 7;
-    rows = list.map(b => ({
-      id: b.tenderId,
-      html: `<tr>
-        <td><strong>${b.tenderId}</strong></td><td>${b.category}</td>
-        <td>${b.technical}</td><td>${b.financial}</td><td>${b.emd}</td>
+    rows = list.map(b => {
+      const tid = escapeHtmlLite(b.tenderId);
+      return {
+        id: b.tenderId,
+        html: `<tr class="need-row-clickable" role="button" tabindex="0" onclick="openBidDetail('${tid}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openBidDetail('${tid}')}" title="View bid details">
+        <td class="cell-id"><strong>${tid}</strong></td>
+        <td>${escapeHtmlLite(b.category || '—')}</td>
+        <td>${escapeHtmlLite(b.technical || '—')}</td>
+        <td>${escapeHtmlLite(b.financial || '—')}</td>
+        <td>${escapeHtmlLite(b.emd || '—')}</td>
         <td class="cell-date">${formatDateDMY(b.deadline)}</td>
-        <td><span class="badge badge-${b.status === 'Draft' ? 'warning' : b.status === 'Awarded' ? 'success' : 'info'}">${b.status}</span></td>
+        <td class="cell-status"><span class="badge badge-${b.status === 'Draft' ? 'warning' : b.status === 'Awarded' ? 'success' : 'info'}">${escapeHtmlLite(b.status || '—')}</span></td>
       </tr>`
-    }));
+      };
+    });
   } else if (key === 'contracts') {
+    sourceForCategory = ds.contracts;
+    showCategoryFilter = true;
+    const list = applyVendorReportDetailCategory(ds.contracts);
+    const deliveryCount = applyVendorReportDetailCategory(ds.deliveries).length;
     title = 'Active Contracts & Deliveries';
-    lead = `${ds.contracts.length} contract(s) · ${ds.deliveries.length} delivery record(s)${ds.category !== 'All' ? ` in ${ds.category}` : ''}.`;
+    lead = `${list.length} contract(s) · ${deliveryCount} delivery record(s)${vendorReportDetailCtx.category !== 'all' ? ` in ${vendorReportDetailCtx.category}` : ''}. Click a row for contract details.`;
     thead = '<tr><th>Contract</th><th>Tender</th><th>Category</th><th>Value</th><th>PBG</th><th>Delivery</th><th>Status</th><th>Date</th></tr>';
     colCount = 8;
-    rows = ds.contracts.map(c => ({
+    rows = list.map(c => ({
       id: c.id,
-      html: `<tr class="need-row-clickable" role="button" tabindex="0" onclick="openContractsPoDetail('${c.id}')">
-        <td><strong>${c.id}</strong></td>
-        <td>${c.tenderId}${c.title ? `<div class="table-sub">${c.title}</div>` : ''}</td>
-        <td>${c.category}</td><td class="cell-nowrap">${c.value}</td>
-        <td><span class="badge badge-${contractPbgBadge(c.pbg)}">${c.pbg}</span></td>
-        <td>${c.delivery}</td>
-        <td><span class="badge badge-${contractStatusBadge(c.status)}">${c.status}</span></td>
-        <td class="cell-date">${c.date || '—'}</td>
+      html: `<tr class="need-row-clickable" role="button" tabindex="0" onclick="openContractsPoDetail('${escapeHtmlLite(c.id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openContractsPoDetail('${escapeHtmlLite(c.id)}')}" title="View contract details">
+        <td class="cell-id"><strong>${escapeHtmlLite(c.id)}</strong></td>
+        <td class="cell-title">${escapeHtmlLite(c.tenderId || '—')}${c.title ? `<div class="table-sub">${escapeHtmlLite(c.title)}</div>` : ''}</td>
+        <td>${escapeHtmlLite(c.category || '—')}</td>
+        <td class="cell-nowrap">${escapeHtmlLite(c.value || '—')}</td>
+        <td><span class="badge badge-${contractPbgBadge(c.pbg)}">${escapeHtmlLite(c.pbg || '—')}</span></td>
+        <td>${escapeHtmlLite(c.delivery || '—')}</td>
+        <td class="cell-status"><span class="badge badge-${contractStatusBadge(c.status)}">${escapeHtmlLite(c.status || '—')}</span></td>
+        <td class="cell-date">${escapeHtmlLite(c.date || '—')}</td>
       </tr>`
     }));
   } else if (key === 'lifecycle') {
@@ -12861,8 +13905,8 @@ function renderVendorReportDetailModal() {
     rows = ds.stageProgress.map(s => ({
       id: String(s.stage),
       html: `<tr>
-        <td><strong>${s.stage}</strong></td><td>${s.name}</td>
-        <td><span class="badge badge-${s.status === 'Completed' ? 'success' : s.status === 'In Progress' ? 'info' : 'muted'}">${s.status}</span></td>
+        <td><strong>${s.stage}</strong></td><td>${escapeHtmlLite(s.name)}</td>
+        <td class="cell-status"><span class="badge badge-${s.status === 'Completed' ? 'success' : s.status === 'In Progress' ? 'info' : 'muted'}">${escapeHtmlLite(s.status)}</span></td>
       </tr>`
     }));
   } else {
@@ -12872,23 +13916,29 @@ function renderVendorReportDetailModal() {
   const paged = paginateItems(rows, vendorReportDetailPage, 10);
   vendorReportDetailPage = paged.page;
 
-  openModal(title, `<div class="kpi-detail need-row-detail">
-    <p class="need-row-detail-lead">${lead}</p>
-    <div class="data-table-wrap" style="margin-bottom:0.75rem">
-      <table class="data-table data-table--modal">
-        <thead>${thead}</thead>
-        <tbody>
-          ${paged.items.length
-            ? paged.items.map(r => r.html).join('')
-            : `<tr><td colspan="${colCount}" style="text-align:center;color:#64748b;padding:1.25rem">No records for this selection.</td></tr>`}
-        </tbody>
-      </table>
-      ${renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setVendorReportDetailPage')}
+  openModal(title, `<div class="kpi-detail need-row-detail vendor-report-detail-modal">
+    <div class="vendor-report-detail-table" style="margin-bottom:0.75rem">
+      <div class="vendor-report-detail-bar">
+        <p class="vendor-report-detail-bar-lead">${lead}</p>
+        ${showCategoryFilter ? renderVendorReportDetailCategoryFilter(sourceForCategory) : ''}
+      </div>
+      <div class="data-table-wrap kpi-detail-table kpi-detail-table--scroll">
+        <table class="data-table data-table--modal data-table--vendor-report">
+          <thead>${thead}</thead>
+          <tbody>
+            ${paged.items.length
+              ? paged.items.map(r => r.html).join('')
+              : `<tr><td colspan="${colCount}" style="text-align:center;color:#64748b;padding:1.25rem">No records for this selection.</td></tr>`}
+          </tbody>
+        </table>
+        ${paged.items.length ? renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setVendorReportDetailPage', { hideInfo: true }) : ''}
+      </div>
     </div>
     <div class="modal-inline-actions">
       <button type="button" class="btn btn-outline" onclick="closeModal()"><i class="fa-solid fa-xmark"></i> Close</button>
     </div>
-  </div>`, { wide: true, large: true });
+  </div>`, { wide: true, large: true, extraWide: true, replace: !!replace });
+  bindVendorReportDetailCategorySelect();
 }
 
 function csvEscape(value) {
@@ -13219,8 +14269,8 @@ function buildGovReportTables(kind) {
         },
         {
           name: 'Vendor_Performance',
-          headers: ['Vendor ID', 'Name', 'Category', 'Quality', 'Lead Time', 'Cost', 'Regulatory', 'Satisfaction', 'Overall', 'Status'],
-          rows: ds.vendors.map(v => [v.id, v.name, v.category, v.quality, v.leadTime, v.cost, v.regulatory, v.satisfaction, v.overall, v.status])
+          headers: ['Vendor ID', 'Name', 'Category', ...PERF_METRICS.map(m => m.label), 'Overall', 'Status'],
+          rows: ds.vendors.map(v => [v.id, v.name, v.category, ...PERF_METRICS.map(m => v[m.key]), v.overall, v.status])
         }
       ]
     };
@@ -13635,19 +14685,20 @@ function renderTenders() {
   tendersListState.page = paged.page;
   const periodLabel = getWfPeriodFilterLabel(tendersListState);
   return `<div class="tenders-page">
-    ${renderWorkflowPeriodFilter('tendersList', tendersListState)}
-    <div class="table-header" style="margin:0.85rem 0 0.65rem">
-      <h3 style="margin:0;font-size:1rem">Tenders</h3>
-      <span class="meta-chip" style="margin:0"><strong>${paged.total}</strong> · ${periodLabel}</span>
+    <div class="data-table-wrap bid-dvdms-table-wrap">
+      <div class="table-header">
+        <h3>Tenders <span class="meta-chip" style="margin:0">${escapeHtmlLite(periodLabel)}</span></h3>
+      </div>
+      ${renderCompactWfPeriodFilter('tendersList', tendersListState)}
+      <div class="cards-grid" style="padding:1rem">
+        ${paged.items.length ? paged.items.map(t => `<div class="info-card info-card--interactive" role="button" tabindex="0" onclick="openTenderDetail('${t.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTenderDetail('${t.id}')}">
+          <h4>${t.id}</h4><p>${t.title}</p>
+          <div class="card-meta"><span>${t.category} · ${t.value}</span><span class="badge badge-${tenderBadgeClass(t.status)}">${t.status}</span></div>
+          <div class="card-meta"><span>Deadline: ${formatDateDMY(t.deadline)}</span></div>
+        </div>`).join('') : `<div class="empty-state-card"><i class="fa-solid fa-inbox"></i><p>No ${emptyLabel} found${currentCategory !== 'All' ? ' for ' + currentCategory : ''} for the selected period.</p></div>`}
+      </div>
+      ${renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setTendersListPage', { hideInfo: true })}
     </div>
-    <div class="cards-grid">
-      ${paged.items.length ? paged.items.map(t => `<div class="info-card info-card--interactive" role="button" tabindex="0" onclick="openTenderDetail('${t.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTenderDetail('${t.id}')}">
-        <h4>${t.id}</h4><p>${t.title}</p>
-        <div class="card-meta"><span>${t.category} · ${t.value}</span><span class="badge badge-${tenderBadgeClass(t.status)}">${t.status}</span></div>
-        <div class="card-meta"><span>Deadline: ${formatDateDMY(t.deadline)}</span></div>
-      </div>`).join('') : `<div class="empty-state-card"><i class="fa-solid fa-inbox"></i><p>No ${emptyLabel} found${currentCategory !== 'All' ? ' for ' + currentCategory : ''} for the selected period.</p></div>`}
-    </div>
-    ${renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setTendersListPage')}
   </div>`;
 }
 
@@ -13663,12 +14714,11 @@ function renderBids() {
   bidsListState.page = paged.page;
   const periodLabel = getWfPeriodFilterLabel(bidsListState);
   return `<div class="bids-page">
-    ${renderWorkflowPeriodFilter('bidsList', bidsListState)}
-    <div class="data-table-wrap mt-2">
+    <div class="data-table-wrap bid-dvdms-table-wrap">
       <div class="table-header">
-        <h3>Bid submissions</h3>
-        <span class="meta-chip" style="margin:0"><strong>${paged.total}</strong> · ${periodLabel}</span>
+        <h3>Bid Submitted <span class="meta-chip" style="margin:0">${escapeHtmlLite(periodLabel)}</span></h3>
       </div>
+      ${renderCompactWfPeriodFilter('bidsList', bidsListState)}
       <table class="data-table">
         <thead><tr><th>Tender</th><th>Category</th><th>Technical</th><th>Financial</th><th>EMD</th><th>Deadline</th><th>Status</th></tr></thead>
         <tbody>
@@ -13682,7 +14732,7 @@ function renderBids() {
           </tr>`).join('') : `<tr><td colspan="7" style="text-align:center;color:#64748b;padding:1.25rem">No bids match the selected category and period.</td></tr>`}
         </tbody>
       </table>
-      ${renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setBidsListPage')}
+      ${renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setBidsListPage', { hideInfo: true })}
     </div>
   </div>`;
 }
@@ -13698,6 +14748,31 @@ function bidStatusBadge(status) {
   return 'info';
 }
 
+function resolveBidListCoverageRow(bid, tender) {
+  const dvdms = (typeof vendorBidDvdmsState !== 'undefined' ? (vendorBidDvdmsState.rows || []) : [])
+    .find(r => r.tenderId === bid.tenderId)
+    || (typeof VENDOR_BID_DVDMS_API !== 'undefined' ? (VENDOR_BID_DVDMS_API.rows || []) : [])
+      .find(r => r.tenderId === bid.tenderId);
+  let coveredItems = resolveLifecycleCoveredItems({
+    tenderId: bid.tenderId,
+    category: bid.category,
+    biddedItems: bid.biddedItems || dvdms?.biddedItems,
+    coveredItems: bid.coveredItems || dvdms?.biddedItems
+  });
+  if (!coveredItems.length && categoryUsesItemWiseDetail(bid.category) && tender) {
+    coveredItems = getTenderScopeItemNames(tender);
+  }
+  return {
+    ...bid,
+    bidId: dvdms?.bidId || bid.tenderId,
+    title: dvdms?.title || tender?.title || 'Bid submission',
+    value: tender?.value || dvdms?.value || '—',
+    biddedItems: coveredItems,
+    coveredItems,
+    categoryScope: `This ${bid.category} bid is managed at category level. Line-item article schedules are not published for Services / Others packages.`
+  };
+}
+
 function openBidDetail(tenderId) {
   const b = (typeof BIDS !== 'undefined' ? BIDS : []).find(x => x.tenderId === tenderId);
   if (!b) {
@@ -13705,65 +14780,96 @@ function openBidDetail(tenderId) {
     return;
   }
   const tender = (typeof TENDERS !== 'undefined' ? TENDERS : []).find(t => t.id === b.tenderId);
-  const title = tender?.title || 'Bid submission';
+  const row = resolveBidListCoverageRow(b, tender);
+  const title = row.title || 'Bid submission';
   const daysLeft = daysUntilDeadline(b.deadline);
   const deadlineHint = daysLeft == null
-    ? ''
+    ? '—'
     : daysLeft > 0
       ? `${daysLeft} day(s) remaining`
       : daysLeft === 0
         ? 'Due today'
         : 'Deadline passed';
   const clarifCount = (typeof CLARIFICATIONS !== 'undefined' ? CLARIFICATIONS : []).filter(c => c.tenderId === b.tenderId).length;
+  const itemWise = categoryUsesItemWiseDetail(b.category);
+  const cov = itemWise ? getBidArticleCoverage(row) : null;
+  const summaryRows = [
+    ['Tender ID', b.tenderId],
+    ['Title', title],
+    ['Category', b.category || '—'],
+    ['Detail type', itemWise ? 'Item-wise' : 'Category-wise'],
+    ['Est. value', row.value || '—'],
+    ['Bid deadline', `${formatDateDMY(b.deadline)}${deadlineHint && deadlineHint !== '—' ? ` · ${deadlineHint}` : ''}`],
+    ['Linked clarifications', String(clarifCount)],
+    ['Technical pack', b.technical === 'Submitted' || b.technical === 'Complete' ? 'Uploaded' : b.technical || '—'],
+    ['Financial pack', b.financial === 'Submitted' ? 'Submitted' : b.financial === 'Sealed' ? 'Sealed until technical qualification' : (b.financial || '—')],
+    ['EMD', b.emd === 'Paid' ? 'Paid and verified' : 'Pending payment / proof']
+  ];
+  if (cov) {
+    summaryRows.push(['Articles bidded', `${cov.biddedCount} of ${cov.total}`]);
+  }
 
-  openModal(`${b.tenderId} — Bid details`, `<div class="kpi-detail need-row-detail">
-    <p class="need-row-detail-lead">${title} · <strong>${b.category}</strong></p>
-    <div class="tender-detail-stats tender-detail-stats--4">
-      <div class="tender-stat"><span>Status</span><strong><span class="badge badge-${bidStatusBadge(b.status)}">${b.status}</span></strong></div>
-      <div class="tender-stat"><span>Technical</span><strong><span class="badge badge-${b.technical === 'Complete' || b.technical === 'Submitted' ? 'success' : 'warning'}">${b.technical}</span></strong></div>
-      <div class="tender-stat"><span>Financial</span><strong><span class="badge badge-${b.financial === 'Sealed' ? 'muted' : 'success'}">${b.financial === 'Sealed' ? 'Sealed' : b.financial}</span></strong></div>
-      <div class="tender-stat"><span>EMD</span><strong><span class="badge badge-${b.emd === 'Paid' ? 'success' : 'warning'}">${b.emd}</span></strong></div>
-    </div>
-    <div class="tender-detail-section">
-      <div class="tender-detail-section-head"><h4>Bid summary</h4></div>
-      <div class="data-table-wrap" style="margin-bottom:0.75rem">
-        <table class="data-table data-table--modal">
-          <tbody>
-            <tr><td>Tender ID</td><td><strong>${b.tenderId}</strong></td></tr>
-            <tr><td>Title</td><td>${title}</td></tr>
-            <tr><td>Category</td><td>${b.category}</td></tr>
-            <tr><td>Est. value</td><td>${tender?.value || '—'}</td></tr>
-            <tr><td>Bid deadline</td><td class="cell-date">${formatDateDMY(b.deadline)}${deadlineHint ? ` · ${deadlineHint}` : ''}</td></tr>
-            <tr><td>Linked clarifications</td><td>${clarifCount}</td></tr>
-            <tr><td>Technical pack</td><td>${b.technical === 'Submitted' || b.technical === 'Complete' ? 'Uploaded' : 'Incomplete'}</td></tr>
-            <tr><td>Financial pack</td><td>${b.financial === 'Submitted' ? 'Submitted' : b.financial === 'Sealed' ? 'Sealed until technical qualification' : b.financial}</td></tr>
-            <tr><td>EMD</td><td>${b.emd === 'Paid' ? 'Paid and verified' : 'Pending payment / proof'}</td></tr>
-          </tbody>
-        </table>
+  openModal(`${escapeHtmlLite(b.tenderId)} — Bid details`, `<div class="dvdms-detail">
+    <div class="dvdms-detail-banner">
+      <div>
+        <p class="dvdms-detail-eyebrow">MPPHSCL · Bid details</p>
+        <h3>${escapeHtmlLite(title)}</h3>
+        <p>${escapeHtmlLite(b.tenderId)} · ${escapeHtmlLite(b.category || '—')}</p>
       </div>
-      <p>${b.status === 'Draft'
-        ? 'Complete technical and financial packs and settle EMD before the deadline to submit this bid.'
-        : b.status === 'Under Evaluation'
-          ? 'Your bid is under evaluation. Commercial opening follows technical qualification.'
-          : b.status === 'Awarded'
-            ? 'This bid has been awarded. Proceed to award acknowledgement and contract execution in the Bid-to-Pay lifecycle.'
-            : 'Review pack completeness and portal status for this tender.'}</p>
+      <span class="badge badge-${bidStatusBadge(b.status)}">${escapeHtmlLite(b.status || '—')}</span>
     </div>
+    <div class="dvdms-detail-stats">
+      <div class="dvdms-detail-stat"><span>Technical</span><strong>${escapeHtmlLite(b.technical || '—')}</strong></div>
+      <div class="dvdms-detail-stat"><span>Financial</span><strong>${escapeHtmlLite(b.financial || '—')}</strong></div>
+      <div class="dvdms-detail-stat"><span>EMD</span><strong>${escapeHtmlLite(b.emd || '—')}</strong></div>
+      <div class="dvdms-detail-stat"><span>Deadline</span><strong>${escapeHtmlLite(deadlineHint)}</strong></div>
+    </div>
+    ${cov ? `<div class="dvdms-detail-stats bid-coverage-stats">
+      <div class="dvdms-detail-stat"><span>Category articles</span><strong>${cov.total}</strong></div>
+      <div class="dvdms-detail-stat is-bidded"><span>Bidded by vendor</span><strong>${cov.biddedCount}</strong></div>
+      <div class="dvdms-detail-stat is-not-bidded"><span>Not bidded</span><strong>${cov.notBiddedCount}</strong></div>
+      <div class="dvdms-detail-stat"><span>Coverage</span><strong>${cov.total ? Math.round((cov.biddedCount / cov.total) * 100) : 0}%</strong></div>
+    </div>
+    ${renderBidArticleCoveragePanel(row)}` : renderLifecycleCoverageBlock(row, {
+      stageTitle: `${b.category || 'Category'} · category-wise bid`,
+      noun: 'bid',
+      yesLabel: 'In bid',
+      noLabel: 'Not in bid',
+      yesHint: 'Articles covered under this bid',
+      noHint: 'In category catalogue · not quoted on this bid',
+      statusHead: 'Bid scope',
+      filterLabel: 'Bid Status',
+      headTitle: `${b.category || 'Category'} · category coverage`
+    })}
+    <div class="dvdms-detail-panel">
+      <div class="dvdms-detail-panel-head">Bid summary</div>
+      <table class="dvdms-detail-table">
+        <tbody>
+          ${summaryRows.map(([k, v]) => `<tr><th scope="row">${escapeHtmlLite(k)}</th><td>${escapeHtmlLite(v)}</td></tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    <p class="dvdms-detail-note">${b.status === 'Draft'
+      ? 'Complete technical and financial packs and settle EMD before the deadline to submit this bid.'
+      : b.status === 'Under Evaluation'
+        ? 'Your bid is under evaluation. Commercial opening follows technical qualification.'
+        : b.status === 'Awarded'
+          ? 'This bid has been awarded. Proceed to award acknowledgement and contract execution in the Bid-to-Pay lifecycle.'
+          : 'Review pack completeness and portal status for this tender.'}</p>
     <div class="modal-inline-actions">
       <button type="button" class="btn btn-outline" onclick="closeModal()"><i class="fa-solid fa-xmark"></i> Close</button>
-      ${tender ? `<button type="button" class="btn btn-outline" onclick="openTenderDetail('${b.tenderId}')"><i class="fa-solid fa-magnifying-glass"></i> View tender</button>` : ''}
+      ${tender ? `<button type="button" class="btn btn-primary" onclick="openTenderDetail('${b.tenderId}')"><i class="fa-solid fa-magnifying-glass"></i> View tender</button>` : ''}
     </div>
   </div>`, { wide: true, large: true });
 }
 
 function renderClarifications() {
   const items = filterByCategory(CLARIFICATIONS);
-  const paged = paginateItems(items, clarificationsListPage, 10);
-  clarificationsListPage = paged.page;
-  return `<div class="data-table-wrap">
+  const paged = paginateItems(items, clarificationsListState.page, 10);
+  clarificationsListState.page = paged.page;
+  return `<div class="data-table-wrap bid-dvdms-table-wrap">
       <div class="table-header">
         <h3>Clarifications</h3>
-        <span class="meta-chip" style="margin:0"><strong>${paged.total}</strong> queries</span>
       </div>
       <table class="data-table">
         <thead><tr><th>Query ID</th><th>Tender</th><th>Category</th><th>Subject</th><th>Status</th><th>Response</th></tr></thead>
@@ -13775,12 +14881,12 @@ function renderClarifications() {
           </tr>`).join('') : emptyTableRow(6)}
         </tbody>
       </table>
-      ${renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setClarificationsListPage')}
+      ${renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setClarificationsListPage', { hideInfo: true })}
     </div>`;
 }
 
 function setClarificationsListPage(page) {
-  clarificationsListPage = Math.max(1, Number(page) || 1);
+  clarificationsListState.page = Math.max(1, Number(page) || 1);
   renderPageContent();
 }
 
@@ -13802,32 +14908,68 @@ function openClarificationDetail(queryId) {
   }
   const tender = (typeof TENDERS !== 'undefined' ? TENDERS : []).find(t => t.id === c.tenderId);
   const responseBody = getClarificationResponseText(c);
+  const statusBadge = c.status === 'Answered' ? 'success' : c.status === 'Pending' ? 'warning' : 'info';
+  const itemWise = categoryUsesItemWiseDetail(c.category);
+  let coveredItems = resolveLifecycleCoveredItems({
+    tenderId: c.tenderId,
+    category: c.category,
+    coveredItems: c.coveredItems || c.affectedItems
+  });
+  if (!coveredItems.length && tender) {
+    coveredItems = getTenderScopeItemNames(tender);
+  }
+  const coverageRow = {
+    category: c.category,
+    tenderId: c.tenderId,
+    value: tender?.value || '—',
+    coveredItems,
+    categoryScope: `This ${c.category} clarification is tracked at category level. Line-item article schedules are not published for Services / Others packages.`
+  };
+  const cov = itemWise ? getLifecycleArticleCoverage(coverageRow) : null;
 
-  openModal(`${c.id} — Clarification`, `<div class="kpi-detail need-row-detail">
-    <p class="need-row-detail-lead">${c.subject}</p>
-    <div class="tender-detail-stats tender-detail-stats--4">
-      <div class="tender-stat"><span>Status</span><strong><span class="badge badge-${c.status === 'Answered' ? 'success' : c.status === 'Pending' ? 'warning' : 'info'}">${c.status}</span></strong></div>
-      <div class="tender-stat"><span>Tender</span><strong>${c.tenderId}</strong></div>
-      <div class="tender-stat"><span>Category</span><strong>${c.category}</strong></div>
-      <div class="tender-stat"><span>Response</span><strong>${c.response === 'View' ? 'Available' : c.response}</strong></div>
-    </div>
-    <div class="tender-detail-section">
-      <div class="tender-detail-section-head"><h4>Query details</h4></div>
-      <div class="data-table-wrap" style="margin-bottom:0.75rem">
-        <table class="data-table data-table--modal">
-          <tbody>
-            <tr><td>Query ID</td><td><strong>${c.id}</strong></td></tr>
-            <tr><td>Tender</td><td>${c.tenderId}${tender ? ` · ${tender.title}` : ''}</td></tr>
-            <tr><td>Category</td><td>${c.category}</td></tr>
-            <tr><td>Subject</td><td>${c.subject}</td></tr>
-            <tr><td>Workflow status</td><td><span class="badge badge-${c.status === 'Answered' ? 'success' : c.status === 'Pending' ? 'warning' : 'info'}">${c.status}</span></td></tr>
-          </tbody>
-        </table>
+  openModal(`${escapeHtmlLite(c.id)} — Clarification`, `<div class="dvdms-detail">
+    <div class="dvdms-detail-banner">
+      <div>
+        <p class="dvdms-detail-eyebrow">MPPHSCL · Clarification</p>
+        <h3>${escapeHtmlLite(c.subject || 'Clarification query')}</h3>
+        <p>${escapeHtmlLite(c.tenderId)} · ${escapeHtmlLite(c.category || '—')}</p>
       </div>
+      <span class="badge badge-${statusBadge}">${escapeHtmlLite(c.status || '—')}</span>
     </div>
-    <div class="tender-detail-section">
-      <div class="tender-detail-section-head"><h4>Department response</h4></div>
-      <p>${responseBody}</p>
+    <div class="dvdms-detail-stats">
+      <div class="dvdms-detail-stat"><span>Query ID</span><strong>${escapeHtmlLite(c.id)}</strong></div>
+      <div class="dvdms-detail-stat"><span>Tender</span><strong>${escapeHtmlLite(c.tenderId)}</strong></div>
+      <div class="dvdms-detail-stat"><span>Category</span><strong>${escapeHtmlLite(c.category || '—')}</strong></div>
+      <div class="dvdms-detail-stat"><span>Response</span><strong>${escapeHtmlLite(c.response === 'View' ? 'Available' : (c.response || '—'))}</strong></div>
+    </div>
+    ${renderLifecycleCoverageBlock(coverageRow, {
+      stageTitle: `${c.category || 'Category'} · category-wise clarification`,
+      noun: 'clarification',
+      yesLabel: 'In scope',
+      noLabel: 'Not in scope',
+      yesHint: 'Articles affected by this clarification / corrigendum',
+      noHint: 'In category catalogue · not referenced by this query',
+      statusHead: 'Clarification scope',
+      filterLabel: 'Clarification Status',
+      headTitle: `${c.category || 'Category'} articles · coverage`
+    })}
+    <div class="dvdms-detail-panel">
+      <div class="dvdms-detail-panel-head">Query details</div>
+      <table class="dvdms-detail-table">
+        <tbody>
+          <tr><th scope="row">Query ID</th><td>${escapeHtmlLite(c.id)}</td></tr>
+          <tr><th scope="row">Tender</th><td>${escapeHtmlLite(c.tenderId)}${tender ? ` · ${escapeHtmlLite(tender.title)}` : ''}</td></tr>
+          <tr><th scope="row">Category</th><td>${escapeHtmlLite(c.category || '—')}</td></tr>
+          <tr><th scope="row">Detail type</th><td>${itemWise ? 'Item-wise' : 'Category-wise'}</td></tr>
+          ${cov ? `<tr><th scope="row">Articles in scope</th><td>${cov.coveredCount} of ${cov.total}</td></tr>` : ''}
+          <tr><th scope="row">Subject</th><td>${escapeHtmlLite(c.subject || '—')}</td></tr>
+          <tr><th scope="row">Workflow status</th><td><span class="badge badge-${statusBadge}">${escapeHtmlLite(c.status || '—')}</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="dvdms-detail-panel">
+      <div class="dvdms-detail-panel-head">Department response</div>
+      <p class="dvdms-detail-note" style="margin:0.85rem 1rem 1rem">${escapeHtmlLite(responseBody)}</p>
     </div>
     <div class="modal-inline-actions">
       <button type="button" class="btn btn-outline" onclick="closeModal()"><i class="fa-solid fa-xmark"></i> Close</button>
@@ -13837,7 +14979,7 @@ function openClarificationDetail(queryId) {
 }
 
 function getContractsListRows() {
-  const rows = filterByCategory(typeof CONTRACTS !== 'undefined' ? CONTRACTS : []);
+  let rows = filterByCategory(typeof CONTRACTS !== 'undefined' ? CONTRACTS : []);
   return applyStagePeriodFilter(rows, contractsListState, 'date');
 }
 
@@ -13882,16 +15024,43 @@ function setVendorContractExecPage(page) {
   refreshWorkflowUI();
 }
 
+/** Seed/system invoice rows for this vendor (empty for new/manual with no portal history). */
+function getVendorInvoiceSeedRows() {
+  if (isManualVendorWithoutDeliveryHistory()) return [];
+  return (typeof INVOICE_MATCHING_DATA !== 'undefined' ? INVOICE_MATCHING_DATA.invoices : []).map(r => ({ ...r }));
+}
+
+/** Seed + vendor-uploaded invoice rows (deduped by id). */
+function getVendorInvoiceBaseRows() {
+  const rows = getVendorInvoiceSeedRows();
+  const seen = new Set(rows.map(r => r.id));
+  const local = Array.isArray(vendorStageState.invoiceLocalRows) ? vendorStageState.invoiceLocalRows : [];
+  local.forEach(r => {
+    if (r?.id && !seen.has(r.id)) {
+      rows.push({ ...r });
+      seen.add(r.id);
+    }
+  });
+  return rows;
+}
+
+/**
+ * Manual invoice upload only when system returned no invoices for a new/manual vendor.
+ * Never treat this as an API/error fallback for existing synced vendors.
+ */
+function shouldShowManualInvoiceUpload() {
+  return isManualVendorWithoutDeliveryHistory() && !getVendorInvoiceBaseRows().length;
+}
+
 function getVendorInvoiceExecRows() {
-  let rows = (typeof INVOICE_MATCHING_DATA !== 'undefined' ? INVOICE_MATCHING_DATA.invoices : [])
-    .map(r => ({ ...r, date: getInvoiceStatusDate(r) }));
+  let rows = getVendorInvoiceBaseRows().map(r => ({ ...r, date: getInvoiceStatusDate(r) }));
   const cat = vendorInvoiceExecState.category;
   if (cat && cat !== 'all') rows = rows.filter(r => r.category === cat);
   return applyStagePeriodFilter(rows, vendorInvoiceExecState, 'date');
 }
 
 function getVendorInvoiceCategoryOptions() {
-  const cats = [...new Set((typeof INVOICE_MATCHING_DATA !== 'undefined' ? INVOICE_MATCHING_DATA.invoices : []).map(r => r.category).filter(Boolean))];
+  const cats = [...new Set(getVendorInvoiceBaseRows().map(r => r.category).filter(Boolean))];
   return ['All categories', ...cats];
 }
 
@@ -13912,13 +15081,56 @@ function bindVendorInvoiceExecCategorySelect() {
   });
 }
 
+function renderVendorInvoiceManualUploadStage(canEdit = true) {
+  const inv = vendorStageState.invoice;
+  const uploadDis = !canEdit || inv.submitted;
+  return `<div class="wf-stage-note"><i class="fa-solid fa-circle-info"></i>
+      <div>No invoice records were found in the system for your vendor account yet. Attach delivery proof for the active invoice. Invoice labels below stay visible; Invoice Number, GRN, Amount, and Status are filled from the uploaded document.</div>
+    </div>
+    <div class="ocr-panel mt-2">
+      <div class="ocr-panel-head">
+        <h4><i class="fa-solid fa-file-invoice"></i> Invoice Details</h4>
+        <span class="badge ${inv.submitted ? 'badge-success' : inv.ocrReady ? 'badge-info' : 'badge-muted'}">${inv.submitted ? 'Submitted' : inv.ocrReady ? 'Ready — Review &amp; Save' : 'Awaiting upload'}</span>
+      </div>
+      <div class="label-grid">
+        ${ocrLabel('Invoice Number', inv.number)}
+        ${ocrLabel('GRN Reference', inv.grn)}
+        ${ocrLabel('Invoice Amount (₹)', inv.amount)}
+        ${ocrLabel('Invoice Status', inv.status ? `<span class="badge ${inv.submitted ? 'badge-success' : 'badge-info'}">${inv.status}</span>` : '', { html: true })}
+        ${ocrLabel('Delivery Proof Document', inv.fileName || vendorStageState.uploads.deliveryProof?.name || '')}
+      </div>
+    </div>
+    <div class="mt-2">
+      ${renderInlineUpload({
+        id: 'wfInlineInvoiceProof',
+        title: 'Attach Delivery Proof',
+        hint: 'Signed challan / GRN / acceptance proof · PDF / JPG — fills all invoice labels above',
+        disabled: uploadDis,
+        fileName: inv.fileName || vendorStageState.uploads.deliveryProof?.name,
+        onChange: 'handleInvoiceProofInlineUpload'
+      })}
+    </div>
+    ${!canEdit ? '<div class="wf-inline-alert wf-inline-alert--info mt-2"><i class="fa-solid fa-lock"></i><div><p>Complete earlier stages (especially Delivery) before submitting an invoice.</p></div></div>' : ''}
+    <div class="wf-actions mt-2">
+      <button type="button" class="btn btn-primary"${!canEdit || !inv.ocrReady || inv.submitted ? ' disabled' : ''} onclick="saveInvoiceOcr()">Save Invoice Details</button>
+    </div>`;
+}
+
+function renderVendorInvoiceStage(canEdit = true) {
+  if (shouldShowManualInvoiceUpload()) {
+    return renderVendorInvoiceManualUploadStage(canEdit);
+  }
+  return renderVendorInvoiceExecTable(canEdit);
+}
+
 function setVendorInvoiceExecPage(page) {
   vendorInvoiceExecState.page = Math.max(1, Number(page) || 1);
   refreshWorkflowUI();
 }
 
-function renderVendorInvoiceExecTable() {
+function renderVendorInvoiceExecTable(canEdit = true) {
   const rows = getVendorInvoiceExecRows();
+  const baseRows = getVendorInvoiceBaseRows();
   const paged = paginateItems(rows, vendorInvoiceExecState.page, 10);
   vendorInvoiceExecState.page = paged.page;
   const periodLabel = getWfPeriodFilterLabel(vendorInvoiceExecState);
@@ -13927,37 +15139,243 @@ function renderVendorInvoiceExecTable() {
     ? 'All categories'
     : vendorInvoiceExecState.category;
 
+  const emptyBlock = !baseRows.length
+    ? renderVendorOnboardingEmptyState({
+        icon: 'fa-file-invoice',
+        title: 'No invoice records yet',
+        body: 'No invoices were returned for your vendor code. Once invoice matching records are available, they will appear here for review.',
+        steps: ['Complete delivery / GRN for an active PO', 'Refresh invoice records when available', 'Use Add / Update to submit additional invoices']
+      })
+    : '';
+
+  const filterEmptyRow = !paged.items.length && baseRows.length
+    ? `<tr class="table-filter-empty-row"><td colspan="7"><div class="table-filter-empty"><i class="fa-solid fa-filter"></i><p>No invoices match <strong>${escapeHtmlLite(periodLabel)}</strong>${vendorInvoiceExecState.category !== 'all' ? ` · ${escapeHtmlLite(vendorInvoiceExecState.category)}` : ''}.</p><button type="button" class="btn btn-outline btn-sm" onclick="setVendorInvoiceExecCategory('All categories')">Clear category filter</button></div></td></tr>`
+    : '';
+
   return `<div class="vendor-invoice-exec-table">
-    <div class="data-table-wrap mt-2">
-      <div class="table-header bid-records-header">
-        <h3>Invoice submissions <span class="meta-chip" style="margin:0">${escapeHtmlLite(periodLabel)}</span></h3>
+    <div class="table-header bid-records-header vendor-invoice-stage-head">
+      <h3>Invoice submissions <span class="meta-chip" style="margin:0">${escapeHtmlLite(periodLabel)}</span></h3>
+      <div class="bid-records-header-actions">
+        ${baseRows.length ? `<button type="button" class="btn btn-primary btn-sm" onclick="openVendorInvoiceUpdateModal()">
+          <i class="fa-solid fa-plus"></i> Add / Update invoice
+        </button>` : ''}
         <div class="bid-records-category-filter" title="Filter by category">
           <span class="bid-records-category-label">Category</span>
           ${inlineCustomSelectHTML('invoiceExecCategory', categoryOptions, categorySelected)}
         </div>
       </div>
+    </div>
+    ${emptyBlock}
+    ${baseRows.length ? `<div class="data-table-wrap mt-2">
       ${renderCompactWfPeriodFilter('vendorInvoice', vendorInvoiceExecState)}
       <table class="data-table">
         <thead><tr><th>Invoice</th><th>PO / Tender</th><th>Category</th><th>GRN</th><th>Status</th><th>Amount</th><th>Date</th></tr></thead>
         <tbody>
-          ${paged.items.length ? paged.items.map(r => `<tr class="need-row-clickable" role="button" tabindex="0" onclick="openVendorInvoiceDetail('${r.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openVendorInvoiceDetail('${r.id}')}" title="View invoice details">
-            <td><strong>${r.id}</strong></td>
-            <td>${r.poId}<div class="table-sub">${r.tenderId || ''}</div></td>
-            <td>${r.category}</td>
-            <td>${r.grnId || '—'}</td>
-            <td><span class="badge badge-${needStatusBadge(r.status)}">${r.status}</span></td>
-            <td class="cell-nowrap">${r.value}</td>
-            <td class="cell-date">${r.date || '—'}</td>
-          </tr>`).join('') : `<tr><td colspan="7" style="text-align:center;color:#64748b;padding:1.25rem">No invoices match the selected category and period.</td></tr>`}
+          ${paged.items.length ? paged.items.map(r => `<tr class="need-row-clickable" role="button" tabindex="0" onclick="openVendorInvoiceDetail('${escapeHtmlLite(r.id)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openVendorInvoiceDetail('${escapeHtmlLite(r.id)}')}" title="View invoice details">
+            <td><strong>${escapeHtmlLite(r.id)}</strong></td>
+            <td>${escapeHtmlLite(r.poId || '—')}<div class="table-sub">${escapeHtmlLite(r.tenderId || '')}</div></td>
+            <td>${escapeHtmlLite(r.category || '—')}</td>
+            <td>${escapeHtmlLite(r.grnId || '—')}</td>
+            <td><span class="badge badge-${needStatusBadge(r.status)}">${escapeHtmlLite(r.status || '—')}</span></td>
+            <td class="cell-nowrap">${escapeHtmlLite(r.value || '—')}</td>
+            <td class="cell-date">${escapeHtmlLite(r.date || '—')}</td>
+          </tr>`).join('') : filterEmptyRow}
         </tbody>
       </table>
-      ${renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setVendorInvoiceExecPage', { hideInfo: true })}
+      ${paged.items.length ? renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setVendorInvoiceExecPage', { hideInfo: true }) : ''}
+    </div>` : ''}
+  </div>`;
+}
+
+const INVOICE_UPDATE_TENDER_PLACEHOLDER = 'Select tender for this invoice…';
+
+const vendorInvoiceUpdateDraft = {
+  tenderId: '',
+  number: '',
+  grn: '',
+  amount: '',
+  status: '',
+  ocrReady: false,
+  fileName: null
+};
+
+function resetVendorInvoiceUpdateDraft() {
+  Object.assign(vendorInvoiceUpdateDraft, {
+    tenderId: '',
+    number: '',
+    grn: '',
+    amount: '',
+    status: '',
+    ocrReady: false,
+    fileName: null
+  });
+}
+
+function renderVendorInvoiceUpdateModalBody() {
+  const d = vendorInvoiceUpdateDraft;
+  const options = getVendorLifecycleTenderSelectOptions(INVOICE_UPDATE_TENDER_PLACEHOLDER);
+  const selected = d.tenderId
+    ? (options.find(o => o.startsWith(`${d.tenderId} — `)) || INVOICE_UPDATE_TENDER_PLACEHOLDER)
+    : INVOICE_UPDATE_TENDER_PLACEHOLDER;
+  const hasTender = !!d.tenderId;
+  return `<div class="dvdms-detail vendor-update-modal">
+    <p class="dvdms-detail-note" style="margin-top:0">Select the tender first. Delivery-proof upload unlocks after tender selection. Saving adds the invoice to your submissions table.</p>
+    <div class="form-group" style="margin-bottom:1rem">
+      <label>${reqLabel('Tender')}</label>
+      ${inlineCustomSelectHTML('invoiceUpdateTender', options, selected)}
+    </div>
+    <div class="ocr-panel">
+      <div class="ocr-panel-head">
+        <h4><i class="fa-solid fa-file-invoice"></i> Invoice Details</h4>
+        <span class="badge ${d.ocrReady ? 'badge-info' : 'badge-muted'}">${d.ocrReady ? 'Ready — Review &amp; Save' : 'Awaiting upload'}</span>
+      </div>
+      <div class="label-grid">
+        ${ocrLabel('Invoice Number', d.number)}
+        ${ocrLabel('GRN Reference', d.grn)}
+        ${ocrLabel('Invoice Amount (₹)', d.amount)}
+        ${ocrLabel('Invoice Status', d.status ? `<span class="badge badge-info">${escapeHtmlLite(d.status)}</span>` : '', { html: true })}
+        ${ocrLabel('Delivery Proof Document', d.fileName || '')}
+      </div>
+    </div>
+    <div class="mt-2">
+      ${renderInlineUpload({
+        id: 'wfModalInvoiceUpload',
+        title: 'Attach Delivery Proof',
+        hint: hasTender
+          ? 'Signed challan / GRN / acceptance proof · PDF / JPG — fills all invoice labels above'
+          : 'Select a tender above to enable upload',
+        disabled: !hasTender,
+        fileName: d.fileName,
+        onChange: 'handleInvoiceUpdateModalUpload'
+      })}
+    </div>
+    <div class="modal-inline-actions">
+      <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button type="button" class="btn btn-primary"${!hasTender || !d.ocrReady ? ' disabled' : ''} onclick="saveVendorInvoiceUpdateModal()">
+        <i class="fa-solid fa-check"></i> Save invoice
+      </button>
     </div>
   </div>`;
 }
 
+function bindVendorInvoiceUpdateTenderSelect() {
+  const wrap = document.querySelector('#modalBody .custom-select[data-select-id="invoiceUpdateTender"]');
+  if (!wrap || wrap.dataset.invoiceUpdateBound) return;
+  wrap.dataset.invoiceUpdateBound = '1';
+  wrap.addEventListener('change', () => {
+    const label = typeof getCustomSelectValue === 'function' ? getCustomSelectValue('invoiceUpdateTender') : '';
+    const tenderId = (!label || label === INVOICE_UPDATE_TENDER_PLACEHOLDER)
+      ? ''
+      : (label.split(' — ')[0] || '').trim();
+    vendorInvoiceUpdateDraft.tenderId = tenderId;
+    vendorInvoiceUpdateDraft.number = '';
+    vendorInvoiceUpdateDraft.grn = '';
+    vendorInvoiceUpdateDraft.amount = '';
+    vendorInvoiceUpdateDraft.status = '';
+    vendorInvoiceUpdateDraft.ocrReady = false;
+    vendorInvoiceUpdateDraft.fileName = null;
+    openModal('Add / Update invoice', renderVendorInvoiceUpdateModalBody(), { wide: true, large: true, replace: true });
+  });
+}
+
+function openVendorInvoiceUpdateModal() {
+  if (!getVendorInvoiceBaseRows().length) {
+    showWfAlert('Synced invoice records are required before adding updates.');
+    return;
+  }
+  if (!getVendorLifecycleTenderChoices().length) {
+    showWfAlert('No tenders are available to link. Complete award / contract selection first.');
+    return;
+  }
+  resetVendorInvoiceUpdateDraft();
+  openModal('Add / Update invoice', renderVendorInvoiceUpdateModalBody(), { wide: true, large: true });
+}
+
+function handleInvoiceUpdateModalUpload(input) {
+  if (!vendorInvoiceUpdateDraft.tenderId) {
+    showWfAlert('Select a tender before attaching delivery proof.');
+    if (input) input.value = '';
+    return;
+  }
+  const file = input?.files?.[0];
+  if (!file) return;
+  const suffix = String(Date.now()).slice(-4);
+  simulateOcrDelay(() => {
+    Object.assign(vendorInvoiceUpdateDraft, {
+      number: `INV-2026-${suffix}`,
+      grn: `GRN-2026-${suffix}`,
+      amount: '4,25,000',
+      status: 'Ready — Confirm to Save',
+      ocrReady: true,
+      fileName: file.name
+    });
+    openModal('Add / Update invoice', renderVendorInvoiceUpdateModalBody(), { wide: true, large: true, replace: true });
+  });
+}
+
+function saveVendorInvoiceUpdateModal() {
+  const d = vendorInvoiceUpdateDraft;
+  if (!d.tenderId) {
+    showWfAlert('Select a tender before saving.');
+    return;
+  }
+  if (!d.ocrReady) {
+    showWfAlert('Attach Delivery Proof first so invoice details can be populated.');
+    return;
+  }
+  const choice = getVendorLifecycleTenderChoices().find(t => t.tenderId === d.tenderId) || {};
+  const contract = typeof getContractRecordForTender === 'function' ? getContractRecordForTender(d.tenderId) : null;
+  const delivery = (vendorDeliverySyncState.rows || []).find(r => r.tenderId === d.tenderId);
+  const n = getVendorInvoiceBaseRows().length + 1;
+  const invId = d.number || `INV-2026-${String(9000 + n).padStart(4, '0')}`;
+  const row = {
+    id: invId,
+    poId: choice.poId || delivery?.poId || contract?.poId || `PO-${String(d.tenderId).replace(/^TND-/, '')}`,
+    grnId: d.grn || delivery?.grn || '—',
+    tenderId: d.tenderId,
+    title: choice.title || contract?.title || d.tenderId,
+    state: 'Madhya Pradesh',
+    division: contract?.division || '—',
+    category: choice.category || contract?.category || '—',
+    status: 'Under match',
+    vendor: authUser?.organization || authUser?.name || '—',
+    invoiceDate: formatDateDMY(APP_TODAY),
+    date: formatDateDMY(APP_TODAY),
+    value: d.amount ? `₹${d.amount}` : (contract?.value || '—'),
+    poValue: contract?.value || '—',
+    grnValue: d.grn || '—',
+    matchScore: '—',
+    taxInvoice: invId,
+    deductions: '—',
+    financeStatus: 'On hold',
+    remarks: 'Vendor-uploaded invoice update',
+    fileName: d.fileName || null,
+    source: 'vendor-upload'
+  };
+  if (!Array.isArray(vendorStageState.invoiceLocalRows)) vendorStageState.invoiceLocalRows = [];
+  vendorStageState.invoiceLocalRows.push(row);
+  vendorStageState.invoice = {
+    ...vendorStageState.invoice,
+    number: invId,
+    grn: row.grnId,
+    amount: d.amount || '',
+    status: 'Submitted',
+    submitted: true,
+    ocrReady: true,
+    fileName: d.fileName
+  };
+  vendorStageState.payment.milestones[0].done = true;
+  vendorStageState.payment.status = 'Under Verification';
+  vendorStageState.payment.lastUpdate = formatDateDMY(APP_TODAY);
+  if (!vendorStageState.completed?.[8]) completeVendorStage(8);
+  persistVendorLifecycle();
+  closeModal();
+  refreshWorkflowUI();
+  showWfAlert(`Invoice <strong>${escapeHtmlLite(invId)}</strong> added for tender <strong>${escapeHtmlLite(d.tenderId)}</strong>.`, 'success');
+}
+
 function openVendorInvoiceDetail(invId) {
-  const r = (typeof INVOICE_MATCHING_DATA !== 'undefined' ? INVOICE_MATCHING_DATA.invoices : []).find(i => i.id === invId);
+  const r = getVendorInvoiceBaseRows().find(i => i.id === invId);
   if (!r) return;
   const statusSince = getInvoiceStatusDate(r);
   const rows = [
@@ -13999,6 +15417,7 @@ function openVendorInvoiceDetail(invId) {
       yesHint: 'Articles covered on this tax invoice / GRN match',
       noHint: 'In category catalogue · not billed on this invoice',
       statusHead: 'Invoice status',
+      filterLabel: 'Invoice Status',
       headTitle: `${r.category || 'Category'} articles · invoice coverage`
     })}
     <div class="dvdms-detail-panel">
@@ -14016,9 +15435,105 @@ function openVendorInvoiceDetail(invId) {
   </div>`, { wide: true, large: true });
 }
 
+function resolveLinkedBidId(tenderId) {
+  if (!tenderId) return '';
+  const pools = [];
+  if (typeof vendorBidDvdmsState !== 'undefined') pools.push(...(vendorBidDvdmsState.rows || []));
+  if (typeof VENDOR_BID_DVDMS_API !== 'undefined') pools.push(...(VENDOR_BID_DVDMS_API.rows || []));
+  if (typeof vendorAwardSyncState !== 'undefined') pools.push(...(vendorAwardSyncState.rows || []));
+  if (typeof VENDOR_AWARD_SYNC_API !== 'undefined') pools.push(...(VENDOR_AWARD_SYNC_API.rows || []));
+  const hit = pools.find(r => r?.tenderId === tenderId && r?.bidId);
+  if (hit?.bidId) return hit.bidId;
+  const m = String(tenderId).match(/(\d{4})$/);
+  return m ? `BID-2026-${m[1]}` : '';
+}
+
+function enrichVendorPaymentRow(r) {
+  return {
+    ...r,
+    bidId: r.bidId || resolveLinkedBidId(r.tenderId),
+    date: getPaymentStatusDate(r)
+  };
+}
+
+function getVendorPaymentSyncMeta() {
+  return {
+    status: vendorPaymentSyncState.status === 'synced'
+      ? 'Synced'
+      : (vendorPaymentSyncState.status === 'error' ? 'Not synced' : (vendorPaymentSyncState.status === 'loading' ? 'Syncing' : 'Not synced')),
+    lastSynced: vendorPaymentSyncState.lastSynced || '—'
+  };
+}
+
+function applyVendorPaymentSyncFetch({ isRefresh = false } = {}) {
+  vendorPaymentSyncState.fetchCount += 1;
+  vendorPaymentSyncState.status = 'synced';
+  const now = new Date();
+  vendorPaymentSyncState.lastSynced =
+    `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()} ` +
+    `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} IST`;
+  if (isRefresh && typeof PAYMENT_STAGE_DATA !== 'undefined') {
+    const rows = PAYMENT_STAGE_DATA.payments || [];
+    const idx = rows.findIndex(r => /in process/i.test(r.status || ''));
+    if (idx >= 0 && vendorPaymentSyncState.fetchCount > 1) {
+      rows[idx] = {
+        ...rows[idx],
+        status: 'Approved',
+        mode: rows[idx].mode && rows[idx].mode !== '—' ? rows[idx].mode : 'PFMS',
+        remarks: 'Treasury cleared after refresh — awaiting final release.'
+      };
+    }
+  }
+  vendorStageState.payment.lastUpdate = formatDateDMY(APP_TODAY);
+  if (!vendorStageState.completed?.[9] && vendorStageState.invoice.submitted) {
+    completeVendorStage(9);
+  }
+}
+
+function ensureVendorPaymentSyncLoaded() {
+  if (vendorPaymentSyncState.status === 'synced' || vendorPaymentSyncState.status === 'loading') return;
+  applyVendorPaymentSyncFetch({ isRefresh: false });
+}
+
+function refreshVendorPaymentSyncApi() {
+  if (vendorPaymentSyncState.status === 'loading') return;
+  vendorPaymentSyncState.status = 'loading';
+  try {
+    refreshWorkflowUI();
+  } catch (err) {
+    console.warn('Payment UI refresh failed during loading state', err);
+  }
+  setTimeout(() => {
+    try {
+      applyVendorPaymentSyncFetch({ isRefresh: true });
+      persistVendorLifecycle();
+      refreshWorkflowUI();
+      const count = (typeof PAYMENT_STAGE_DATA !== 'undefined' ? PAYMENT_STAGE_DATA.payments : []).length;
+      openModal('Data refreshed', `
+        <div class="sync-success-msg">
+          <div class="sync-success-icon"><i class="fa-solid fa-circle-check"></i></div>
+          <h4>Latest payment records are ready</h4>
+          <p>Fetched <strong>${count}</strong> payment record(s) for vendor <strong>${escapeHtmlLite(authUser?.vendorId || '—')}</strong>. Open a row to see tender, bid, invoice and payment status.</p>
+        </div>
+      `);
+    } catch (err) {
+      console.warn('Payment sync failed', err);
+      vendorPaymentSyncState.status = 'error';
+      refreshWorkflowUI();
+      openModal('Sync unsuccessful', `
+        <div class="sync-success-msg sync-error-msg">
+          <div class="sync-success-icon sync-error-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+          <h4>Payment records could not be updated</h4>
+          <p>Sync did not complete. Please try Refresh again in a moment.</p>
+        </div>
+      `);
+    }
+  }, 650);
+}
+
 function getVendorPaymentExecRows() {
   let rows = (typeof PAYMENT_STAGE_DATA !== 'undefined' ? PAYMENT_STAGE_DATA.payments : [])
-    .map(r => ({ ...r, date: getPaymentStatusDate(r) }));
+    .map(enrichVendorPaymentRow);
   const cat = vendorPaymentExecState.category;
   if (cat && cat !== 'all') rows = rows.filter(r => r.category === cat);
   return applyStagePeriodFilter(rows, vendorPaymentExecState, 'date');
@@ -14051,18 +15566,154 @@ function setVendorPaymentExecPage(page) {
   refreshWorkflowUI();
 }
 
-function renderVendorPaymentExecTable() {
+function renderVendorPaymentStage(canEdit = true) {
+  ensureVendorPaymentSyncLoaded();
+  return `${renderVendorPaymentExecTable(canEdit)}
+    ${renderVendorActivePaymentProgress()}`;
+}
+
+function getActiveVendorPaymentFocus() {
+  const rows = (typeof PAYMENT_STAGE_DATA !== 'undefined' ? PAYMENT_STAGE_DATA.payments : [])
+    .map(enrichVendorPaymentRow);
+  if (!rows.length) return null;
+  const invNo = vendorStageState.invoice?.number;
+  if (invNo) {
+    const byInv = rows.find(r => String(r.invoiceId || '') === String(invNo));
+    if (byInv) return byInv;
+  }
+  const localInv = (vendorStageState.invoiceLocalRows || [])[0];
+  if (localInv?.id) {
+    const byLocal = rows.find(r => r.invoiceId === localInv.id);
+    if (byLocal) return byLocal;
+  }
+  const pipeline = rows.find(r => /in process|approved|under verification|finance|on hold/i.test(r.status || ''));
+  if (pipeline) return pipeline;
+  const paid = rows.find(r => /^paid$/i.test(r.status || ''));
+  if (paid) return paid;
+  return rows[0];
+}
+
+function renderVendorActivePaymentProgress() {
+  const p = vendorStageState.payment;
+  const inv = vendorStageState.invoice;
+  if (inv.submitted) {
+    p.milestones[0].done = true;
+    if (p.status === 'Awaiting Processing' || p.status === 'Not started') {
+      p.status = 'Under Verification';
+    }
+    if (p.lastUpdate === '—') p.lastUpdate = formatDateDMY(APP_TODAY);
+  }
+  const focus = getActiveVendorPaymentFocus();
+  const status = focus?.status || p.status || '—';
+  const tenderId = focus?.tenderId || vendorStageState.contract?.tenderId || vendorStageState.award?.tenderId || '—';
+  const bidId = focus?.bidId || resolveLinkedBidId(tenderId) || '—';
+  const title = focus?.title || vendorStageState.award?.title || vendorStageState.contract?.tenderId || '—';
+  const invoiceId = focus?.invoiceId || inv.number || '—';
+  const poId = focus?.poId || '—';
+  const category = focus?.category || '—';
+  const netPayable = focus?.netPayable || inv.amount || '—';
+  const mode = focus?.mode || '—';
+  const paymentId = focus?.id || '—';
+  const utr = focus?.utr || '—';
+  const subtitle = tenderId !== '—'
+    ? `Tracking payment for tender <strong>${escapeHtmlLite(tenderId)}</strong> · bid <strong>${escapeHtmlLite(bidId)}</strong>`
+    : 'Submit an invoice to start tender-linked payment tracking';
+
+  return `<div class="payment-track mt-2">
+    <div class="payment-track-header">
+      <div>
+        <h4>Active payment progress</h4>
+        <p>${subtitle}</p>
+      </div>
+      <span class="badge badge-${needStatusBadge(status)}">${escapeHtmlLite(status)}</span>
+    </div>
+    <div class="payment-summary-grid payment-summary-grid--detail">
+      <div class="payment-summary-card">
+        <span class="payment-summary-label">Payment ID</span>
+        <strong>${escapeHtmlLite(paymentId)}</strong>
+      </div>
+      <div class="payment-summary-card">
+        <span class="payment-summary-label">Tender</span>
+        <strong>${escapeHtmlLite(tenderId)}</strong>
+      </div>
+      <div class="payment-summary-card">
+        <span class="payment-summary-label">Bid</span>
+        <strong>${escapeHtmlLite(bidId)}</strong>
+      </div>
+      <div class="payment-summary-card">
+        <span class="payment-summary-label">Title</span>
+        <strong>${escapeHtmlLite(title)}</strong>
+      </div>
+      <div class="payment-summary-card">
+        <span class="payment-summary-label">Invoice</span>
+        <strong>${escapeHtmlLite(invoiceId)}</strong>
+      </div>
+      <div class="payment-summary-card">
+        <span class="payment-summary-label">PO</span>
+        <strong>${escapeHtmlLite(poId)}</strong>
+      </div>
+      <div class="payment-summary-card">
+        <span class="payment-summary-label">Category</span>
+        <strong>${escapeHtmlLite(category)}</strong>
+      </div>
+      <div class="payment-summary-card">
+        <span class="payment-summary-label">Net payable</span>
+        <strong>${escapeHtmlLite(netPayable)}</strong>
+      </div>
+      <div class="payment-summary-card">
+        <span class="payment-summary-label">Mode / UTR</span>
+        <strong>${escapeHtmlLite(mode)}${utr && utr !== '—' ? ` · ${escapeHtmlLite(utr)}` : ''}</strong>
+      </div>
+      <div class="payment-summary-card">
+        <span class="payment-summary-label">Bank Account</span>
+        <strong>${escapeHtmlLite(p.bank || '—')}</strong>
+      </div>
+      <div class="payment-summary-card">
+        <span class="payment-summary-label">Expected Timeline</span>
+        <strong>${escapeHtmlLite(p.timeline || '—')}</strong>
+      </div>
+      <div class="payment-summary-card">
+        <span class="payment-summary-label">Last Update</span>
+        <strong>${escapeHtmlLite(focus?.date || p.lastUpdate || '—')}</strong>
+      </div>
+    </div>
+    ${focus?.id ? `<div class="payment-track-actions">
+      <button type="button" class="btn btn-outline btn-sm" onclick="openVendorPaymentDetail('${escapeHtmlLite(focus.id)}')">
+        <i class="fa-solid fa-eye"></i> View full payment details
+      </button>
+    </div>` : ''}
+  </div>`;
+}
+
+function renderVendorPaymentExecTable(canEdit = true) {
+  ensureVendorPaymentSyncLoaded();
+  const meta = getVendorPaymentSyncMeta();
   const rows = getVendorPaymentExecRows();
+  const allCount = (typeof PAYMENT_STAGE_DATA !== 'undefined' ? PAYMENT_STAGE_DATA.payments : []).length;
   const paged = paginateItems(rows, vendorPaymentExecState.page, 10);
   vendorPaymentExecState.page = paged.page;
+  const loading = vendorPaymentSyncState.status === 'loading';
+  const refreshDis = loading ? ' disabled' : '';
   const periodLabel = getWfPeriodFilterLabel(vendorPaymentExecState);
   const categoryOptions = getVendorPaymentCategoryOptions();
   const categorySelected = vendorPaymentExecState.category === 'all'
     ? 'All categories'
     : vendorPaymentExecState.category;
 
-  return `<div class="vendor-payment-exec-table">
-    <div class="data-table-wrap mt-2">
+  const emptyBlock = !allCount
+    ? renderVendorOnboardingEmptyState({
+        icon: 'fa-indian-rupee-sign',
+        title: 'No payment records yet',
+        body: 'No payment advice records were returned for your vendor code. Refresh to pull the latest payment status once invoices enter finance processing.',
+        steps: ['Submit invoice with GRN reference', 'Refresh to load payment records', 'Open a row for tender / bid / payment detail']
+      })
+    : '';
+
+  const filterEmptyRow = !paged.items.length
+    ? `<tr class="table-filter-empty-row"><td colspan="7"><div class="table-filter-empty"><i class="fa-solid fa-filter"></i><p>No payments match <strong>${escapeHtmlLite(periodLabel)}</strong>${vendorPaymentExecState.category !== 'all' ? ` · ${escapeHtmlLite(vendorPaymentExecState.category)}` : ''}.</p><button type="button" class="btn btn-outline btn-sm" onclick="setVendorPaymentExecCategory('All categories')">Clear category filter</button></div></td></tr>`
+    : '';
+
+  const tableBlock = allCount ? `<div class="data-table-wrap bid-dvdms-table-wrap mt-2">
       <div class="table-header bid-records-header">
         <h3>Payment records <span class="meta-chip" style="margin:0">${escapeHtmlLite(periodLabel)}</span></h3>
         <div class="bid-records-category-filter" title="Filter by category">
@@ -14071,52 +15722,119 @@ function renderVendorPaymentExecTable() {
         </div>
       </div>
       ${renderCompactWfPeriodFilter('vendorPayment', vendorPaymentExecState)}
-      <table class="data-table">
-        <thead><tr><th>Payment</th><th>Invoice</th><th>Category</th><th>Status</th><th>Mode</th><th>Net payable</th><th>Date</th></tr></thead>
-        <tbody>
-          ${paged.items.length ? paged.items.map(r => `<tr class="need-row-clickable" role="button" tabindex="0" onclick="openVendorPaymentDetail('${r.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openVendorPaymentDetail('${r.id}')}" title="View payment details">
-            <td><strong>${r.id}</strong></td>
-            <td>${r.invoiceId}<div class="table-sub">${r.title || ''}</div></td>
-            <td>${r.category}</td>
-            <td><span class="badge badge-${needStatusBadge(r.status)}">${r.status}</span></td>
-            <td>${r.mode || '—'}</td>
-            <td class="cell-nowrap">${r.netPayable}</td>
-            <td class="cell-date">${r.date || '—'}</td>
-          </tr>`).join('') : `<tr><td colspan="7" style="text-align:center;color:#64748b;padding:1.25rem">No payments match the selected category and period.</td></tr>`}
-        </tbody>
-      </table>
-      ${renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setVendorPaymentExecPage', { hideInfo: true })}
+      <div class="bid-dvdms-table-scroll">
+        <table class="data-table payment-sync-table">
+          <thead>
+            <tr>
+              <th>Payment</th>
+              <th>Tender / Bid</th>
+              <th>Invoice / PO</th>
+              <th>Category</th>
+              <th>Status</th>
+              <th>Net payable</th>
+              <th>Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${paged.items.length ? paged.items.map(r => {
+              const id = escapeHtmlLite(r.id);
+              return `<tr class="need-row-clickable" role="button" tabindex="0" onclick="openVendorPaymentDetail('${id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openVendorPaymentDetail('${id}')}" title="View payment details">
+              <td class="cell-id"><strong>${id}</strong><div class="table-sub">${escapeHtmlLite(r.title || '')}</div></td>
+              <td class="cell-tender"><strong>${escapeHtmlLite(r.tenderId || '—')}</strong><div class="table-sub">${escapeHtmlLite(r.bidId || '—')}</div></td>
+              <td><strong>${escapeHtmlLite(r.invoiceId || '—')}</strong><div class="table-sub">${escapeHtmlLite(r.poId || '')}</div></td>
+              <td>${escapeHtmlLite(r.category || '—')}</td>
+              <td><span class="badge badge-${needStatusBadge(r.status)}">${escapeHtmlLite(r.status || '—')}</span></td>
+              <td class="cell-nowrap">${escapeHtmlLite(r.netPayable || '—')}</td>
+              <td class="cell-date">${escapeHtmlLite(r.date || '—')}</td>
+            </tr>`;
+            }).join('') : filterEmptyRow}
+          </tbody>
+        </table>
+      </div>
+      ${paged.items.length ? renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setVendorPaymentExecPage', { hideInfo: true }) : ''}
+    </div>` : '';
+
+  return `<div class="need-api bid-dvdms-stage vendor-payment-stage">
+    <div class="need-api-banner">
+      <div class="need-api-banner-icon"><i class="fa-solid fa-cloud-arrow-down"></i></div>
+      <div class="need-api-banner-text">
+        <strong>Payment records</strong>
+        <p>Tender, bid, invoice and payment status · Last synced <strong>${escapeHtmlLite(meta.lastSynced)}</strong></p>
+      </div>
+      <div class="need-api-banner-actions">
+        ${renderApiSyncBadge(meta.status === 'Syncing' ? 'Not synced' : meta.status)}
+        <button type="button" class="btn btn-outline btn-sm" onclick="refreshVendorPaymentSyncApi()"${refreshDis}>
+          <i class="fa-solid fa-arrows-rotate${loading ? ' fa-spin' : ''}"></i> ${loading ? 'Syncing…' : 'Refresh'}
+        </button>
+      </div>
+    </div>
+    ${emptyBlock}
+    ${tableBlock}
+  </div>`;
+}
+
+function renderRejectionReasonBanner(reason) {
+  const text = String(reason || '').trim();
+  if (!text || text === '—') return '';
+  return `<div class="dvdms-detail-rejection" role="status">
+    <i class="fa-solid fa-circle-xmark" aria-hidden="true"></i>
+    <div>
+      <strong>Rejection reason</strong>
+      <p>${escapeHtmlLite(text)}</p>
     </div>
   </div>`;
 }
 
+/** Only mark article lines as Paid when funds were actually released. */
+function getPaymentCoverageSourceRow(row) {
+  if (/^paid$/i.test(String(row?.status || ''))) return row;
+  return { ...row, forceEmptyCoverage: true };
+}
+
 function openVendorPaymentDetail(payId) {
-  const r = (typeof PAYMENT_STAGE_DATA !== 'undefined' ? PAYMENT_STAGE_DATA.payments : []).find(p => p.id === payId);
-  if (!r) return;
+  const raw = (typeof PAYMENT_STAGE_DATA !== 'undefined' ? PAYMENT_STAGE_DATA.payments : []).find(p => p.id === payId);
+  if (!raw) return;
+  const r = enrichVendorPaymentRow(raw);
   const statusSince = getPaymentStatusDate(r);
+  const isRejected = /reject/i.test(String(r.status || ''));
+  const rejectionReason = r.rejectionReason || (isRejected ? r.remarks : '');
+  const coverageRow = getPaymentCoverageSourceRow(r);
   const rows = [
     ['Payment ID', r.id],
+    ['Tender', r.tenderId || '—'],
+    ['Bid', r.bidId || '—'],
+    ['Title', r.title || '—'],
     ['Invoice ID', r.invoiceId || '—'],
     ['PO', r.poId || '—'],
-    ['Tender', r.tenderId || '—'],
     ['Vendor', r.vendor || '—'],
     ['Category', r.category || '—'],
     ['Detail type', categoryUsesItemWiseDetail(r.category) ? 'Item-wise' : 'Category-wise'],
     ['Division', r.division || '—'],
     ['Gross amount', r.gross || '—'],
     ['LD / deductions', r.ld || '—'],
+    ['Mode', r.mode || '—'],
     ['UTR / reference', r.utr || '—'],
     ['Due date', r.dueDate && r.dueDate !== '—' ? r.dueDate : '—'],
     ['Status since', statusSince || '—']
   ];
+  if (isRejected && rejectionReason) {
+    rows.push(['Rejection reason', rejectionReason]);
+  }
   openModal(`${escapeHtmlLite(r.id)} — Payment details`, `<div class="dvdms-detail">
     <div class="dvdms-detail-banner">
       <div>
         <p class="dvdms-detail-eyebrow">MPPHSCL · Payment details</p>
         <h3>${escapeHtmlLite(r.title || 'Payment')}</h3>
-        <p>${escapeHtmlLite(r.invoiceId || '—')} · ${escapeHtmlLite(r.tenderId || '—')} · ${escapeHtmlLite(r.category || '—')}</p>
+        <p>${escapeHtmlLite(r.tenderId || '—')} · ${escapeHtmlLite(r.bidId || '—')} · ${escapeHtmlLite(r.category || '—')}</p>
       </div>
       <span class="badge badge-${needStatusBadge(r.status)}">${escapeHtmlLite(r.status || '—')}</span>
+    </div>
+    ${isRejected ? renderRejectionReasonBanner(rejectionReason) : ''}
+    <div class="dvdms-detail-stats">
+      <div class="dvdms-detail-stat"><span>Tender</span><strong>${escapeHtmlLite(r.tenderId || '—')}</strong></div>
+      <div class="dvdms-detail-stat"><span>Bid</span><strong>${escapeHtmlLite(r.bidId || '—')}</strong></div>
+      <div class="dvdms-detail-stat"><span>Invoice</span><strong>${escapeHtmlLite(r.invoiceId || '—')}</strong></div>
+      <div class="dvdms-detail-stat"><span>PO</span><strong>${escapeHtmlLite(r.poId || '—')}</strong></div>
     </div>
     <div class="dvdms-detail-stats">
       <div class="dvdms-detail-stat"><span>Status</span><strong>${escapeHtmlLite(r.status || '—')}</strong></div>
@@ -14124,14 +15842,19 @@ function openVendorPaymentDetail(payId) {
       <div class="dvdms-detail-stat"><span>Mode</span><strong>${escapeHtmlLite(r.mode || '—')}</strong></div>
       <div class="dvdms-detail-stat"><span>Payment date</span><strong>${escapeHtmlLite(r.paymentDate && r.paymentDate !== '—' ? r.paymentDate : '—')}</strong></div>
     </div>
-    ${renderLifecycleCoverageBlock(r, {
+    ${renderLifecycleCoverageBlock(coverageRow, {
       stageTitle: `${r.category || 'Category'} · category-wise payment`,
       noun: 'payment',
       yesLabel: 'Paid',
       noLabel: 'Not paid',
-      yesHint: 'Articles covered under this payment release',
-      noHint: 'In category catalogue · not part of this payment',
+      yesHint: isRejected
+        ? 'No articles were paid — this payment was rejected'
+        : 'Articles covered under this payment release',
+      noHint: isRejected
+        ? 'Catalogue articles · payment not released for this record'
+        : 'In category catalogue · not part of this payment',
       statusHead: 'Payment status',
+      filterLabel: 'Payment Status',
       headTitle: `${r.category || 'Category'} articles · payment coverage`
     })}
     <div class="dvdms-detail-panel">
@@ -14142,7 +15865,7 @@ function openVendorPaymentDetail(payId) {
         </tbody>
       </table>
     </div>
-    ${r.remarks ? `<p class="dvdms-detail-note">${escapeHtmlLite(r.remarks)}</p>` : ''}
+    ${!isRejected && r.remarks ? `<p class="dvdms-detail-note">${escapeHtmlLite(r.remarks)}</p>` : ''}
     <div class="modal-inline-actions">
       <button type="button" class="btn btn-outline" onclick="closeModal()"><i class="fa-solid fa-xmark"></i> Close</button>
     </div>
@@ -14185,9 +15908,9 @@ function getVendorRenewalRequestRows() {
 }
 
 function getVendorRenewalCategoryOptions() {
-  const submitted = (vendorStageState.renewalRequests || []);
-  const seeded = getVendorSeedRenewalRequests();
-  const cats = [...new Set([...submitted, ...seeded].map(r => r.category).filter(Boolean))];
+  const cats = typeof CATEGORIES !== 'undefined'
+    ? CATEGORIES.filter(c => c && c !== 'All')
+    : ['Drugs', 'Equipment', 'Services', 'Consumables', 'Others'];
   return ['All categories', ...cats];
 }
 
@@ -14344,6 +16067,7 @@ function openVendorRenewalDetail(reqId) {
       yesHint: 'Articles proposed under this renewal scope',
       noHint: 'In category catalogue · outside this renewal request',
       statusHead: 'Renewal status',
+      filterLabel: 'Renewal Status',
       headTitle: `${r.category || 'Category'} articles · renewal coverage`
     })}
     <div class="dvdms-detail-panel">
@@ -14631,19 +16355,17 @@ function renderContracts() {
   return `<div class="contracts-page">
     <div class="indent-mode-banner">
       <div>
-        <strong>${currentRole === 'vendor' ? 'Your contracts — synced from Contract Management / DVDMS' : 'Contracts &amp; POs — DVDMS supply link'}</strong>
-        <p>${currentRole === 'vendor'
+        <strong>${currentRole === 'vendor' ? 'Your contracts — synced from Contract Management' : 'Contracts &amp; POs — supply execution link'}</strong>
+        <p class="indent-mode-banner-copy">${currentRole === 'vendor'
           ? 'LOA acknowledgement, PBG, signed T&amp;C, PO and SLA status are the same records Resource Manager sees. Do not re-enter master data.'
-          : 'PO is raised in DVDMS; open a row for summary or use Contract Management for full lifecycle, performance and AI/ML ops.'}</p>
-        ${typeof sourceBadge === 'function' ? `<div class="src-badge-row">${sourceBadge('DVDMS')}${sourceBadge('NIC')}</div>` : ''}
+          : 'Open a row for summary or use Contract Management for full lifecycle, performance and AI/ML ops.'}</p>
       </div>
     </div>
-    ${renderWorkflowPeriodFilter('contractsList', contractsListState)}
-    <div class="data-table-wrap mt-2">
+    <div class="data-table-wrap mt-2 bid-dvdms-table-wrap">
       <div class="table-header">
-        <h3>Contracts &amp; POs</h3>
-        <span class="meta-chip" style="margin:0"><strong>${paged.total}</strong> · ${periodLabel}</span>
+        <h3>Contracts &amp; POs <span class="meta-chip" style="margin:0">${escapeHtmlLite(periodLabel)}</span></h3>
       </div>
+      ${renderCompactWfPeriodFilter('contractsList', contractsListState)}
       <table class="data-table">
         <thead><tr><th>Contract ID</th><th>Tender</th><th>Category</th><th>Value</th><th>PBG</th><th>Delivery</th><th>Status</th><th>Date</th></tr></thead>
         <tbody>
@@ -14659,7 +16381,7 @@ function renderContracts() {
           </tr>`).join('') : `<tr><td colspan="8" style="text-align:center;color:#64748b;padding:1.25rem">No contracts match the selected category and period.</td></tr>`}
         </tbody>
       </table>
-      ${renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setContractsListPage')}
+      ${renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setContractsListPage', { hideInfo: true })}
     </div>
   </div>`;
 }
@@ -14668,11 +16390,7 @@ function openContractsPoDetail(contractId) {
   const c = (typeof CONTRACTS !== 'undefined' ? CONTRACTS : []).find(x => x.id === contractId);
   if (!c) return;
   const enriched = typeof enrichContractForMgmt === 'function' ? enrichContractForMgmt(c) : c;
-  const followUpHead = currentRole === 'gov'
-    ? `<button type="button" class="btn btn-primary btn-sm" onclick="openContractsFollowUp('${c.id}')">
-          <i class="fa-solid fa-envelope-open-text"></i> Take Follow-up
-        </button>`
-    : '';
+  const tender = (typeof TENDERS !== 'undefined' ? TENDERS : []).find(t => t.id === c.tenderId);
   const followUpFooter = currentRole === 'gov'
     ? `<button type="button" class="btn btn-primary" onclick="openContractsFollowUp('${c.id}')"><i class="fa-solid fa-envelope-open-text"></i> Take Follow-up</button>`
     : '';
@@ -14682,51 +16400,82 @@ function openContractsPoDetail(contractId) {
           <i class="fa-solid fa-file-pdf"></i> Download Purchase Order
         </button>`
     : '';
-  const syncBanner = typeof sourceBadge === 'function'
-    ? `<div class="indent-mode-banner" style="margin-bottom:0.85rem">
-        <div>
-          <strong>Synced from Contract Management / DVDMS</strong>
-          <p>Same facts as Resource Manager Contract Management — no re-keying. LOA / PBG / PO / SLA status flows from DVDMS &amp; NIC.</p>
-          <div class="src-badge-row">${sourceBadge('DVDMS')}${sourceBadge('NIC')}</div>
-        </div>
-        ${enriched.lifecycleStage ? `<span class="badge badge-info">${enriched.lifecycleStage}</span>` : ''}
-      </div>`
-    : '';
-  openModal(`${c.id} — Contract details`, `<div class="kpi-detail need-row-detail">
-    ${syncBanner}
-    <p class="need-row-detail-lead">${c.title || 'Contract'} · <strong>${c.tenderId}</strong></p>
-    <div class="tender-detail-stats tender-detail-stats--4">
-      <div class="tender-stat"><span>Value</span><strong>${c.value}</strong></div>
-      <div class="tender-stat"><span>Status</span><strong><span class="badge badge-${contractStatusBadge(c.status)}">${c.status}</span></strong></div>
-      <div class="tender-stat"><span>PBG</span><strong><span class="badge badge-${contractPbgBadge(c.pbg)}">${c.pbg}</span></strong></div>
-      <div class="tender-stat"><span>Contract date</span><strong class="cell-date">${c.date || '—'}</strong></div>
-    </div>
-    <div class="tender-detail-section">
-      <div class="tender-detail-section-head">
-        <h4>Contract &amp; PO summary</h4>
-        ${followUpHead}
+  const itemWise = categoryUsesItemWiseDetail(c.category);
+  let coveredItems = resolveLifecycleCoveredItems({
+    tenderId: c.tenderId,
+    category: c.category,
+    coveredItems: c.coveredItems || c.contractItems || enriched.coveredItems
+  });
+  if (!coveredItems.length && tender) {
+    coveredItems = getTenderScopeItemNames(tender);
+  }
+  if (!coveredItems.length && itemWise) {
+    coveredItems = getTenderScopeItemNames({ id: c.tenderId, category: c.category, value: c.value, title: c.title });
+  }
+  const coverageRow = {
+    category: c.category,
+    tenderId: c.tenderId,
+    contractId: c.id,
+    value: c.value,
+    coveredItems,
+    categoryScope: `This ${c.category} contract is executed at category level. Line-item article schedules are not published for Services / Others packages.`
+  };
+  const cov = itemWise ? getLifecycleArticleCoverage(coverageRow) : null;
+  const summaryRows = [
+    ['Contract ID', c.id],
+    ['Linked PO', c.poId || '—'],
+    ['LOI / LOA', `${enriched.loiNo || '—'} · Ack: ${enriched.loiAck || '—'}`],
+    ['Tender', c.tenderId || '—'],
+    ['Title', c.title || '—'],
+    ['Vendor', c.vendor || '—'],
+    ['Category', c.category || '—'],
+    ['Detail type', itemWise ? 'Item-wise' : 'Category-wise'],
+    ['Division', c.division || '—'],
+    ['PBG amount', c.pbgAmount || '—'],
+    ['Delivery', c.delivery || '—'],
+    ['Period', `${c.startDate || '—'} → ${c.endDate || '—'}`],
+    ['Contract date', c.date || '—']
+  ];
+  if (cov) {
+    summaryRows.push(['Articles in contract', `${cov.coveredCount} of ${cov.total}`]);
+  }
+
+  openModal(`${escapeHtmlLite(c.id)} — Contract details`, `<div class="dvdms-detail">
+    <div class="dvdms-detail-banner">
+      <div>
+        <p class="dvdms-detail-eyebrow">MPPHSCL · Contract details</p>
+        <h3>${escapeHtmlLite(c.title || 'Contract')}</h3>
+        <p>${escapeHtmlLite(c.tenderId || '—')} · ${escapeHtmlLite(c.category || '—')}${enriched.lifecycleStage ? ` · ${escapeHtmlLite(enriched.lifecycleStage)}` : ''}</p>
       </div>
-      <div class="data-table-wrap" style="margin-bottom:0.75rem">
-        <table class="data-table data-table--modal">
-          <tbody>
-            <tr><td>Contract ID</td><td><strong>${c.id}</strong></td></tr>
-            <tr><td>Linked PO (DVDMS)</td><td>${c.poId || '—'}</td></tr>
-            <tr><td>LOI / LOA</td><td>${enriched.loiNo || '—'} · Ack: ${enriched.loiAck || '—'}</td></tr>
-            <tr><td>Tender</td><td>${c.tenderId}</td></tr>
-            <tr><td>Title</td><td>${c.title || '—'}</td></tr>
-            <tr><td>Vendor</td><td>${c.vendor || '—'}</td></tr>
-            <tr><td>Category</td><td>${c.category}</td></tr>
-            <tr><td>Division</td><td>${c.division || '—'}</td></tr>
-            <tr><td>PBG amount</td><td>${c.pbgAmount || '—'}</td></tr>
-            <tr><td>Delivery</td><td>${c.delivery}</td></tr>
-            <tr><td>Period</td><td>${c.startDate || '—'} → ${c.endDate || '—'}</td></tr>
-            <tr><td>Contract date</td><td><strong class="cell-date">${c.date || '—'}</strong></td></tr>
-          </tbody>
-        </table>
-      </div>
-      <p>${c.remarks || ''}</p>
-      ${canDownloadPo ? `<p class="report-footnote"><i class="fa-solid fa-circle-info"></i> Contract is <strong>Active</strong> with delivery <strong>Completed</strong> — Purchase Order (MPPHCL format) is available to download.</p>` : ''}
+      <span class="badge badge-${contractStatusBadge(c.status)}">${escapeHtmlLite(c.status || '—')}</span>
     </div>
+    <div class="dvdms-detail-stats">
+      <div class="dvdms-detail-stat"><span>Value</span><strong>${escapeHtmlLite(c.value || '—')}</strong></div>
+      <div class="dvdms-detail-stat"><span>PBG</span><strong>${escapeHtmlLite(c.pbg || '—')}</strong></div>
+      <div class="dvdms-detail-stat"><span>Delivery</span><strong>${escapeHtmlLite(c.delivery || '—')}</strong></div>
+      <div class="dvdms-detail-stat"><span>Contract date</span><strong>${escapeHtmlLite(c.date || '—')}</strong></div>
+    </div>
+    ${renderLifecycleCoverageBlock(coverageRow, {
+      stageTitle: `${c.category || 'Category'} · category-wise contract`,
+      noun: 'contract',
+      yesLabel: 'In contract',
+      noLabel: 'Not in contract',
+      yesHint: 'Articles covered under this contract / PO schedule',
+      noHint: 'In category catalogue · not part of this contract',
+      statusHead: 'Contract scope',
+      filterLabel: 'Contract Status',
+      headTitle: `${c.category || 'Category'} articles · coverage`
+    })}
+    <div class="dvdms-detail-panel">
+      <div class="dvdms-detail-panel-head">Contract &amp; PO summary</div>
+      <table class="dvdms-detail-table">
+        <tbody>
+          ${summaryRows.map(([k, v]) => `<tr><th scope="row">${escapeHtmlLite(k)}</th><td>${escapeHtmlLite(v)}</td></tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    ${c.remarks ? `<p class="dvdms-detail-note">${escapeHtmlLite(c.remarks)}</p>` : ''}
+    ${canDownloadPo ? `<p class="dvdms-detail-note"><i class="fa-solid fa-circle-info"></i> Contract is <strong>Active</strong> with delivery <strong>Completed</strong> — Purchase Order (MPPHCL format) is available to download.</p>` : ''}
     <div class="modal-inline-actions">
       <button type="button" class="btn btn-outline" onclick="closeModal()"><i class="fa-solid fa-xmark"></i> Close</button>
       ${currentRole === 'gov' && typeof openContractMgmtDetail === 'function' ? `<button type="button" class="btn btn-outline" onclick="openContractMgmtDetail('${c.id}')"><i class="fa-solid fa-file-signature"></i> Full Contract Mgmt</button>` : ''}
@@ -16514,12 +18263,11 @@ function renderDelivery() {
   const periodLabel = getWfPeriodFilterLabel(deliveryListState);
 
   return `<div class="delivery-page">
-    ${renderWorkflowPeriodFilter('deliveryList', deliveryListState)}
-    <div class="data-table-wrap mt-2">
+    <div class="data-table-wrap bid-dvdms-table-wrap">
       <div class="table-header">
-        <h3>Delivery &amp; Invoices</h3>
-        <span class="meta-chip" style="margin:0"><strong>${paged.total}</strong> · ${periodLabel}</span>
+        <h3>Delivery &amp; Invoices <span class="meta-chip" style="margin:0">${escapeHtmlLite(periodLabel)}</span></h3>
       </div>
+      ${renderCompactWfPeriodFilter('deliveryList', deliveryListState)}
       <table class="data-table">
         <thead><tr><th>Delivery Challan ID</th><th>PO Reference</th><th>Category</th><th>Items</th><th>GRN Status</th><th>Invoice</th><th>Payment</th><th>Date</th></tr></thead>
         <tbody>
@@ -16535,13 +18283,13 @@ function renderDelivery() {
           </tr>`).join('') : `<tr><td colspan="8" style="text-align:center;color:#64748b;padding:1.25rem">No deliveries match the selected category and period.</td></tr>`}
         </tbody>
       </table>
-      ${renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setDeliveryListPage')}
+      ${renderPaginationControls(paged.page, paged.totalPages, paged.total, paged.from, paged.to, 'setDeliveryListPage', { hideInfo: true })}
     </div>
   </div>`;
 }
 
 function getDeliveryListRows() {
-  const rows = filterByCategory(typeof DELIVERIES !== 'undefined' ? DELIVERIES : []);
+  let rows = filterByCategory(typeof DELIVERIES !== 'undefined' ? DELIVERIES : []);
   return applyStagePeriodFilter(rows, deliveryListState, 'date');
 }
 
@@ -16567,7 +18315,27 @@ function openDeliveryDetail(deliveryId) {
   const followUpFooter = currentRole === 'gov'
     ? `<button type="button" class="btn btn-primary" onclick="openDeliveryFollowUp('${d.id}')"><i class="fa-solid fa-envelope-open-text"></i> Take Follow-up</button>`
     : '';
-  const row = { ...d, tenderId: d.tenderId || d.po, amount: d.amount };
+  const contract = (typeof CONTRACTS !== 'undefined' ? CONTRACTS : []).find(c => c.poId === d.po);
+  const tenderId = d.tenderId || contract?.tenderId || '';
+  const tender = tenderId ? (typeof TENDERS !== 'undefined' ? TENDERS : []).find(t => t.id === tenderId) : null;
+  let coveredItems = resolveLifecycleCoveredItems({
+    tenderId,
+    category: d.category,
+    coveredItems: d.coveredItems || d.deliveredItems
+  });
+  if (!coveredItems.length && tender) {
+    coveredItems = getTenderScopeItemNames(tender);
+  }
+  if (!coveredItems.length && categoryUsesItemWiseDetail(d.category)) {
+    coveredItems = getTenderScopeItemNames({ id: tenderId, category: d.category, value: d.amount, title: d.items });
+  }
+  const row = {
+    ...d,
+    tenderId,
+    value: d.amount,
+    coveredItems,
+    categoryScope: `This ${d.category} delivery is tracked at category level. Line-item article schedules are not published for Services / Others packages.`
+  };
   const rows = [
     ['Delivery Challan ID', d.id],
     ['PO Reference', d.po],
@@ -16607,7 +18375,8 @@ function openDeliveryDetail(deliveryId) {
       yesHint: 'Articles included in this consignment / GRN',
       noHint: 'In category catalogue · not in this delivery lot',
       statusHead: 'Delivery status',
-      headTitle: `${d.category || 'Category'} articles · delivery coverage`
+      filterLabel: 'Delivery Status',
+      headTitle: `${d.category || 'Category'} articles · coverage`
     })}
     <div class="dvdms-detail-panel">
       <div class="dvdms-detail-panel-head">
@@ -16917,35 +18686,77 @@ function openVendorRepositoryDetail(docId) {
   </div>`, { wide: true, large: true });
 }
 
+function getVendorRepositoryStageLabel(stageId) {
+  if (stageId === 'all' || stageId == null || stageId === '') return 'All stages';
+  const steps = typeof VENDOR_WORKFLOW !== 'undefined' ? VENDOR_WORKFLOW : [];
+  const step = steps.find(s => String(s.id) === String(stageId));
+  return step ? `${step.id}. ${step.name}` : `Stage ${stageId}`;
+}
+
+function getVendorRepositoryStageOptions() {
+  const steps = typeof VENDOR_WORKFLOW !== 'undefined' ? VENDOR_WORKFLOW : [];
+  return ['All stages', ...steps.map(s => `${s.id}. ${s.name}`)];
+}
+
+function setVendorRepositoryStageFromLabel(label) {
+  if (!label || label === 'All stages') {
+    setVendorRepositoryStage('all');
+    return;
+  }
+  const m = String(label).match(/^(\d+)\./);
+  setVendorRepositoryStage(m ? m[1] : 'all');
+}
+
+function getVendorRepositoryDocTypeOptions(allDocs) {
+  const types = [...new Set((allDocs || []).map(d => d.docType).filter(Boolean))].sort();
+  return ['All types', ...types];
+}
+
+function bindVendorRepositoryFilters() {
+  const stageWrap = document.querySelector('.custom-select[data-select-id="repoLifecycleStage"]');
+  if (stageWrap && !stageWrap.dataset.repoBound) {
+    stageWrap.dataset.repoBound = '1';
+    stageWrap.addEventListener('change', () => {
+      const label = typeof getCustomSelectValue === 'function' ? getCustomSelectValue('repoLifecycleStage') : '';
+      setVendorRepositoryStageFromLabel(label);
+    });
+  }
+  const typeWrap = document.querySelector('.custom-select[data-select-id="repoDocType"]');
+  if (typeWrap && !typeWrap.dataset.repoBound) {
+    typeWrap.dataset.repoBound = '1';
+    typeWrap.addEventListener('change', () => {
+      const label = typeof getCustomSelectValue === 'function' ? getCustomSelectValue('repoDocType') : '';
+      setVendorRepositoryDocType((!label || label === 'All types') ? 'all' : label);
+    });
+  }
+}
+
 function renderVendorRepository() {
   const all = getVendorRepositoryDocs();
   const rows = getFilteredVendorRepositoryDocs();
   const paged = paginateItems(rows, vendorRepositoryState.page, 10);
   vendorRepositoryState.page = paged.page;
 
-  const stageOpts = ['all', ...Array.from(new Set(all.map(d => String(d.stage)))).sort((a, b) => Number(a) - Number(b))];
-  const typeOpts = ['all', ...Array.from(new Set(all.map(d => d.docType).filter(Boolean))).sort()];
+  const stageOptions = getVendorRepositoryStageOptions();
+  const stageSelected = getVendorRepositoryStageLabel(vendorRepositoryState.stage);
+  const typeOptions = getVendorRepositoryDocTypeOptions(all);
+  const typeSelected = vendorRepositoryState.docType === 'all' ? 'All types' : vendorRepositoryState.docType;
   const byStage = {};
   all.forEach(d => { byStage[d.stage] = (byStage[d.stage] || 0) + 1; });
   const sessionCount = all.filter(d => d.source === 'session').length;
 
   const stageSelect = `<div class="form-group repo-filter-group"><label>Lifecycle stage</label>
-    <select class="repo-native-select" onchange="setVendorRepositoryStage(this.value)">
-      ${stageOpts.map(s => `<option value="${s}" ${String(vendorRepositoryState.stage) === String(s) ? 'selected' : ''}>${s === 'all' ? 'All stages' : `Stage ${s}`}</option>`).join('')}
-    </select></div>`;
+    ${inlineCustomSelectHTML('repoLifecycleStage', stageOptions, stageSelected)}
+  </div>`;
   const typeSelect = `<div class="form-group repo-filter-group"><label>Document type</label>
-    <select class="repo-native-select" onchange="setVendorRepositoryDocType(this.value)">
-      ${typeOpts.map(t => `<option value="${t}" ${vendorRepositoryState.docType === t ? 'selected' : ''}>${t === 'all' ? 'All types' : t}</option>`).join('')}
-    </select></div>`;
+    ${inlineCustomSelectHTML('repoDocType', typeOptions, typeSelected)}
+  </div>`;
 
   return `<div class="vendor-repository">
     <div class="report-toolbar">
       <div>
         <p class="report-toolbar-lead">Central repository of documents uploaded across Registration through Renewal.</p>
-        <p class="report-toolbar-meta">Vendor document vault · Download or email any file · Pack export for the filtered set</p>
-      </div>
-      <div class="report-toolbar-actions">
-        <button type="button" class="btn btn-outline" onclick="downloadVendorRepositoryPack()"><i class="fa-solid fa-file-zipper"></i> Download / Email pack</button>
+        <p class="report-toolbar-meta">Vendor document vault · Download or email any file from the table</p>
       </div>
     </div>
 
@@ -16968,7 +18779,6 @@ function renderVendorRepository() {
     <div class="data-table-wrap mt-2">
       <div class="table-header">
         <h3>Document repository</h3>
-        <span class="meta-chip" style="margin:0"><strong>${paged.total}</strong> document(s)</span>
       </div>
       <table class="data-table">
         <thead>
@@ -16987,7 +18797,7 @@ function renderVendorRepository() {
           ${paged.items.length ? paged.items.map(d => `<tr class="need-row-clickable" role="button" tabindex="0" onclick="openVendorRepositoryDetail('${d.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openVendorRepositoryDetail('${d.id}')}" title="View document details">
             <td><strong>${d.id}</strong></td>
             <td>${d.name}${d.source === 'session' ? '<div class="table-sub">Session upload</div>' : ''}</td>
-            <td>${d.stage}. ${d.stageName}</td>
+            <td>${escapeHtmlLite(getVendorRepositoryStageLabel(d.stage))}</td>
             <td>${d.docType}</td>
             <td>${d.relatedRef || '—'}</td>
             <td class="cell-date">${d.uploadedOn || '—'}</td>
@@ -17387,8 +19197,16 @@ function setCategory(cat) {
   vendorDeliverySyncFilterState.category = 'all';
   vendorRepositoryState.page = 1;
   bidsListState.page = 1;
+  bidsListState.category = 'all';
+  clarificationsListState.page = 1;
+  clarificationsListState.category = 'all';
   clarificationsListPage = 1;
+  contractsListState.category = 'all';
+  deliveryListState.category = 'all';
   tendersListState.page = 1;
+  tendersListState.category = 'all';
+  dashboardTenderCategory = 'all';
+  pipelinePage = 1;
   workQueuePage = 1;
   vendorRegListPage = 1;
   vendorMatrixPage = 1;
@@ -17701,7 +19519,7 @@ function openDrillDown(type, title, content) {
 
 function getCategoryMetricAverages(vendors) {
   const list = vendors?.length ? vendors : VENDORS;
-  const keys = ['quality', 'leadTime', 'cost', 'regulatory', 'satisfaction'];
+  const keys = (typeof PERF_METRICS !== 'undefined' ? PERF_METRICS : []).map(m => m.key);
   const out = {};
   keys.forEach(k => {
     out[k] = list.length
@@ -17833,11 +19651,7 @@ function openGovKpiDetail(key) {
                 <th>S.No</th>
                 <th>Vendor</th>
                 <th>Category</th>
-                <th>Quality</th>
-                <th>Lead Time</th>
-                <th>Cost</th>
-                <th>Regulatory</th>
-                <th>Satisfaction</th>
+                ${(typeof PERF_METRICS !== 'undefined' ? PERF_METRICS : []).map(m => `<th>${escapeHtmlLite(m.label)}</th>`).join('')}
                 <th>Overall</th>
                 <th>Status</th>
               </tr></thead>
@@ -17846,14 +19660,10 @@ function openGovKpiDetail(key) {
                   <td>${i + 1}</td>
                   <td class="cell-vendor"><strong>${v.name}</strong><div class="cell-sub">${v.id}</div></td>
                   <td>${v.category}</td>
-                  <td>${v.quality}</td>
-                  <td>${v.leadTime}</td>
-                  <td>${v.cost}</td>
-                  <td>${v.regulatory}</td>
-                  <td>${v.satisfaction}</td>
+                  ${(typeof PERF_METRICS !== 'undefined' ? PERF_METRICS : []).map(m => `<td>${v[m.key] ?? '—'}</td>`).join('')}
                   <td><strong>${v.overall}</strong></td>
                   <td><span class="badge badge-${v.status === 'Preferred' ? 'success' : v.status === 'Watch' ? 'danger' : 'info'}">${v.status}</span></td>
-                </tr>`).join('') : emptyTableRow(10)}
+                </tr>`).join('') : emptyTableRow(3 + ((typeof PERF_METRICS !== 'undefined' ? PERF_METRICS : []).length) + 2)}
               </tbody>
             </table>
           </div>
@@ -18117,7 +19927,7 @@ function openChartTrendDetail(chartKey, seriesLabel, periodLabel, value) {
         </div>
         <div class="trend-detail-explain">
           <i class="fa-solid fa-circle-info"></i>
-          <p>Score combines Quality (30%), Lead Time (20%), Cost (20%), Regulatory (20%), and User Satisfaction (10%). Higher is better; 80+ is preferred vendor threshold.</p>
+          <p>Score combines ${PERF_METRICS.map(m => `${m.label} (${m.weight}%)`).join(', ')}. Higher is better; 80+ is preferred vendor threshold.</p>
         </div>
         <div class="tender-detail-stats tender-detail-stats--3">
           <div class="tender-stat"><span>Period avg</span><strong>${val} pts</strong></div>
@@ -18128,15 +19938,15 @@ function openChartTrendDetail(chartKey, seriesLabel, periodLabel, value) {
           <h4>Vendor ranking — ${periodLabel}</h4>
           <div class="data-table-wrap kpi-detail-table">
             <table class="data-table data-table--modal">
-              <thead><tr><th>S.No</th><th>Vendor</th><th>Category</th><th>Quality</th><th>Lead Time</th><th>Cost</th><th>Overall</th><th>Status</th></tr></thead>
+              <thead><tr><th>S.No</th><th>Vendor</th><th>Category</th><th>Testing through Labs</th><th>Timely Delivery</th><th>Pricing</th><th>Overall</th><th>Status</th></tr></thead>
               <tbody>
                 ${vendors.map((v, i) => `<tr onclick="openVendorDetail('${v.id}')">
                   <td>${i + 1}</td>
                   <td><strong>${v.name}</strong></td>
                   <td>${v.category}</td>
-                  <td>${v.quality}</td>
-                  <td>${v.leadTime}</td>
-                  <td>${v.cost}</td>
+                  <td>${v.testingLabs}</td>
+                  <td>${v.timelyDelivery}</td>
+                  <td>${v.pricing}</td>
                   <td><strong>${v.overall}</strong></td>
                   <td><span class="badge badge-${v.status === 'Preferred' ? 'success' : v.status === 'Watch' ? 'danger' : 'info'}">${v.status}</span></td>
                 </tr>`).join('')}
@@ -18292,122 +20102,14 @@ function openChartPeriodDetail(seriesLabel, periodLabel) {
   `, { wide: true });
 }
 
-function openTenderDetail(tenderId) {
-  const t = TENDERS.find(x => x.id === tenderId);
-  if (!t) {
-    openModal(tenderId, '<p>Tender record not found.</p>');
-    return;
-  }
-
-  const isOpen = t.status === 'Open';
-  const daysLeft = daysUntilDeadline(t.deadline);
-  const emdEstimate = t.category === 'Drugs' ? '₹3,20,000' : t.category === 'Equipment' ? '₹2,50,000' : '₹1,00,000';
-  const linkedItems = getLinkedItemsForTender(t);
-  const bid = getBidForTender(t.id);
-  const clarifs = typeof CLARIFICATIONS !== 'undefined'
-    ? CLARIFICATIONS.filter(c => c.tenderId === t.id)
-    : [];
-
-  const deadlineLabel = !isOpen
-    ? 'Not open for bidding'
-    : daysLeft === null
-      ? ''
-      : daysLeft > 0
-        ? `${daysLeft} day(s) remaining`
-        : daysLeft === 0
-          ? 'Due today'
-          : 'Deadline passed';
-
-  const body = `<div class="tender-detail">
-    <div class="tender-detail-hero">
-      <div>
-        <span class="badge badge-${tenderBadgeClass(t.status)}">${t.status}</span>
-        <h3 class="tender-detail-title">${t.title}</h3>
-        <p class="tender-detail-sub">${t.category} procurement · Estimated value ${t.value} · ${t.bids} bid(s)</p>
-      </div>
-      <div class="tender-detail-deadline ${isOpen && daysLeft !== null && daysLeft <= 5 ? 'urgent' : ''}">
-        <span class="tender-detail-deadline-label">Bid deadline</span>
-        <strong>${formatDateDMY(t.deadline)}</strong>
-        <span>${deadlineLabel}</span>
-      </div>
-    </div>
-
-    <div class="tender-detail-stats tender-detail-stats--3">
-      <div class="tender-stat"><span>Tender ID</span><strong>${t.id}</strong></div>
-      <div class="tender-stat"><span>Category</span><strong>${t.category}</strong></div>
-      <div class="tender-stat"><span>Est. Value</span><strong>${t.value}</strong></div>
-    </div>
-    <div class="tender-detail-stats tender-detail-stats--3">
-      <div class="tender-stat"><span>Bids received</span><strong>${t.bids}</strong></div>
-      <div class="tender-stat"><span>Technical</span><strong>${bid?.technical || (t.status === 'Evaluation' ? 'Under review' : '—')}</strong></div>
-      <div class="tender-stat"><span>Commercial</span><strong>${bid?.financial || 'Sealed'}</strong></div>
-    </div>
-
-    <div class="tender-detail-section">
-      <h4>Overview</h4>
-      <p>Public tender for <strong>${t.title}</strong> under the <strong>${t.category}</strong> category (same record used on Analytics Dashboard). Vendors must meet eligibility criteria, submit technical &amp; financial bids, and furnish EMD before the deadline.</p>
-    </div>
-
-    ${linkedItems.length ? `<div class="tender-detail-section">
-      <h4>${t.category === 'Drugs' ? 'Drug / item lines covered' : 'Item lines covered'}</h4>
-      <div class="data-table-wrap kpi-detail-table">
-        <table class="data-table data-table--modal">
-          <thead><tr><th>S.No</th><th>Item</th><th>Type</th><th>Spend (Approx)</th><th>Facilities</th></tr></thead>
-          <tbody>
-            ${linkedItems.map((i, idx) => `<tr>
-              <td>${idx + 1}</td>
-              <td><strong>${i.name}</strong></td>
-              <td><span class="badge badge-info">${i.type}</span></td>
-              <td>${i.spend}</td>
-              <td>${i.facilities}</td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>` : ''}
-
-    <div class="tender-detail-section">
-      <h4>Key requirements</h4>
-      <ul class="tender-req-list">
-        <li>Valid GSTIN, PAN, and category licenses</li>
-        <li>Technical compliance matrix mapped to NIT/RFP</li>
-        <li>Sealed commercial bid (opened only after technical qualification)</li>
-        <li>EMD approximately <strong>${emdEstimate}</strong> (as per NIT)</li>
-      </ul>
-    </div>
-
-    ${clarifs.length ? `<div class="tender-detail-section">
-      <h4>Clarifications</h4>
-      <div class="data-table-wrap kpi-detail-table">
-        <table class="data-table data-table--modal">
-          <thead><tr><th>S.No</th><th>Query</th><th>Subject</th><th>Status</th></tr></thead>
-          <tbody>
-            ${clarifs.map((c, i) => `<tr>
-              <td>${i + 1}</td>
-              <td><strong>${c.id}</strong></td>
-              <td>${c.subject}</td>
-              <td><span class="badge badge-${c.status === 'Answered' ? 'success' : c.status === 'Pending' ? 'warning' : 'info'}">${c.status}</span></td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>` : ''}
-  </div>`;
-
-  openModal(`${t.id} — ${t.title}`, body, { wide: true, large: true });
-}
-
 function openVendorDetail(id) {
   const v = VENDORS.find(x => x.id === id);
   if (!v) return;
+  const metrics = typeof PERF_METRICS !== 'undefined' ? PERF_METRICS : [];
   openModal(`${v.id} — ${v.name}`, `<div class="drill-simple">
     <p><strong>Overall Score:</strong> ${v.overall} · <strong>Status:</strong> ${v.status} · <strong>Category:</strong> ${v.category}</p>
     <div class="tender-detail-stats mt-2">
-      <div class="tender-stat"><span>Quality</span><strong>${v.quality}</strong></div>
-      <div class="tender-stat"><span>Lead Time</span><strong>${v.leadTime}</strong></div>
-      <div class="tender-stat"><span>Cost</span><strong>${v.cost}</strong></div>
-      <div class="tender-stat"><span>Regulatory</span><strong>${v.regulatory}</strong></div>
-      <div class="tender-stat"><span>Satisfaction</span><strong>${v.satisfaction}</strong></div>
+      ${metrics.map(m => `<div class="tender-stat"><span>${escapeHtmlLite(m.label)}</span><strong>${v[m.key] ?? '—'}</strong></div>`).join('')}
     </div>
   </div>`, { wide: true });
 }

@@ -300,11 +300,12 @@ function initVendorTrendChart(vendors = VENDORS) {
     type: 'bar',
     data: {
       labels: list.map(v => v.id),
-      datasets: [
-        { label: 'Quality', data: list.map(v => v.quality), backgroundColor: chartColors.primary + 'cc', borderRadius: 6 },
-        { label: 'Lead Time', data: list.map(v => v.leadTime), backgroundColor: chartColors.teal + 'cc', borderRadius: 6 },
-        { label: 'Cost', data: list.map(v => v.cost), backgroundColor: chartColors.orange + 'cc', borderRadius: 6 }
-      ]
+      datasets: (typeof PERF_METRICS !== 'undefined' ? PERF_METRICS : []).slice(0, 3).map((m, i) => ({
+          label: m.label,
+          data: list.map(v => v[m.key]),
+          backgroundColor: [chartColors.primary, chartColors.teal, chartColors.orange][i] + 'cc',
+          borderRadius: 6
+        }))
     },
     options: {
       responsive: true,
@@ -596,11 +597,12 @@ function initAnalyticsCompareChart(category = 'All') {
     type: 'bar',
     data: {
       labels: list.map(v => v.name.replace(' India Pvt Ltd', '').replace(' Solutions', '').replace(' Distributors', '')),
-      datasets: [
-        { label: 'Quality', data: list.map(v => v.quality), backgroundColor: chartColors.primary + 'cc', borderRadius: 6 },
-        { label: 'Lead Time', data: list.map(v => v.leadTime), backgroundColor: chartColors.teal + 'cc', borderRadius: 6 },
-        { label: 'Cost', data: list.map(v => v.cost), backgroundColor: chartColors.orange + 'cc', borderRadius: 6 }
-      ]
+      datasets: (typeof PERF_METRICS !== 'undefined' ? PERF_METRICS : []).slice(0, 3).map((m, i) => ({
+          label: m.label,
+          data: list.map(v => v[m.key]),
+          backgroundColor: [chartColors.primary, chartColors.teal, chartColors.orange][i] + 'cc',
+          borderRadius: 6
+        }))
     },
     options: {
       responsive: true,

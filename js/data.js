@@ -22,7 +22,7 @@ const GOV_WORKFLOW = [
 const WORKFLOW_GUIDE_PATH = 'assets/MP-Health-Procurement-Lifecycle-Guide.html';
 
 const VENDOR_STAGE_CHECKLIST = {
-  1: ['Company profile & contact details', 'GSTIN, PAN, incorporation certificate', 'Category & product line declaration', 'Empanelment fee paid on DVDMS / NIC (synced)', 'Authorized signatory letter'],
+  1: ['Company profile & contact details', 'GSTIN, PAN, incorporation certificate', 'Category & product line declaration', 'Registered address', 'Empanelment fee (Pending until present / Submitted when recorded)', 'Authorized signatory letter'],
   2: ['Bank account verification (cancelled cheque)', 'KYC documents & regulatory licenses', 'Address proof & signatory ID', 'Respond to verification queries within 48 hours'],
   3: ['Department review of registration & KYC', 'Confirm vendor code assignment (e.g. VND-MP-000123)', 'Approval notification on portal', 'Link approved profile to bidding'],
   4: ['Review tender and bid status in the table', 'Check EMD and document flags', 'Refresh to fetch the latest bid records', 'Confirm sync once bids appear to continue'],
@@ -30,7 +30,7 @@ const VENDOR_STAGE_CHECKLIST = {
   6: ['Select tender for this contract pack', 'LOI issue → LOI accept → PBG submission', 'Review draft template synced with tender docs', 'Upload tender-specific PBG, SBG, SOW, deliverables & signed contract'],
   7: ['Review delivery records in the table', 'Check challan, GRN and dispatch status', 'Refresh to fetch the latest deliveries', 'Confirm sync once records appear to continue'],
   8: ['Raise invoice with GRN reference', 'Attach delivery & acceptance proof', 'Submit invoice on portal', 'Track invoice verification status'],
-  9: ['Monitor payment processing', 'Confirm credit to bank account', 'Download payment advice / receipt', 'Close invoice cycle'],
+  9: ['Review payment records by tender and bid', 'Refresh to fetch the latest payment status', 'Open a payment row for invoice / PO / UTR detail', 'Confirm credit and close the invoice cycle'],
   10: ['Select Active / In Progress contract or MSA', 'Choose Fresh renewal or Extra quality order', 'Propose renewal period and reason', 'Submit request for Resource Manager review']
 };
 
@@ -809,7 +809,7 @@ const PAYMENT_STAGE_DATA = {
     { id: 'PAY-2026-0133', invoiceId: 'INV-2026-0133', poId: 'PO-2026-0133', tenderId: 'TND-2026-MP-0133', title: 'Waste Management Services', state: 'Madhya Pradesh', division: 'Indore', category: 'Others', status: 'Approved', vendor: 'GreenMed Waste', paymentDate: '—', value: '₹3.1 L – ₹3.8 L', gross: '₹3.1 L – ₹3.8 L', ld: 'Nil', netPayable: '₹3.1 L – ₹3.8 L', mode: 'PFMS', utr: '—', dueDate: '10-10-2026', date: '02-09-2026', remarks: 'Finance approved; awaiting release.' },
     { id: 'PAY-2026-0102', invoiceId: 'INV-2026-0102', poId: 'PO-2026-0102', tenderId: 'TND-2026-MP-0102', title: 'Digital X-Ray Machines', state: 'Madhya Pradesh', division: 'Indore', category: 'Equipment', status: 'On hold', vendor: 'ImageMed Systems', paymentDate: '—', value: '₹2.6 Cr – ₹3.0 Cr', gross: '₹2.6 Cr – ₹3.0 Cr', ld: '—', netPayable: '—', mode: '—', utr: '—', dueDate: '—', date: '08-09-2026', remarks: 'Held until GRN acceptance certificate.' },
     { id: 'PAY-2026-0091', invoiceId: 'INV-2026-0091', poId: 'PO-2026-0091', tenderId: 'TND-2026-MP-0091', title: 'Disposable Gloves Supply', state: 'Madhya Pradesh', division: 'Jabalpur', category: 'Consumables', status: 'On hold', vendor: 'SafeHands Consumables', paymentDate: '—', value: '₹25 L – ₹30 L', gross: '₹25 L – ₹30 L', ld: '—', netPayable: '—', mode: '—', utr: '—', dueDate: '—', date: '02-09-2026', remarks: 'Invoice mismatch — revise before payment.' },
-    { id: 'PAY-2026-0042B', invoiceId: 'INV-2026-0042B', poId: 'PO-2026-0042', tenderId: 'TND-2026-MP-0042', title: 'Essential Medicines (held lot)', state: 'Madhya Pradesh', division: 'Bhopal', category: 'Drugs', status: 'Rejected', vendor: 'MediSupply India', paymentDate: '—', value: '₹48 L – ₹55 L', gross: '₹48 L – ₹55 L', ld: 'N/A', netPayable: 'Nil', mode: '—', utr: '—', dueDate: '—', date: '29-08-2026', remarks: 'No payment — GRN and invoice rejected.' },
+    { id: 'PAY-2026-0042B', invoiceId: 'INV-2026-0042B', poId: 'PO-2026-0042', tenderId: 'TND-2026-MP-0042', title: 'Essential Medicines (held lot)', state: 'Madhya Pradesh', division: 'Bhopal', category: 'Drugs', status: 'Rejected', vendor: 'MediSupply India', paymentDate: '—', value: '₹48 L – ₹55 L', gross: '₹48 L – ₹55 L', ld: 'N/A', netPayable: 'Nil', mode: '—', utr: '—', dueDate: '—', date: '29-08-2026', rejectionReason: 'GRN-2026-0042B failed QA — shelf-life below NIT threshold. Invoice INV-2026-0042B was blocked and no payment was released for this held lot.', remarks: 'No payment — GRN and invoice rejected.' },
     { id: 'PAY-2026-0098', invoiceId: 'INV-2026-0098', poId: 'PO-2026-0098', tenderId: 'TND-2026-MP-0098', title: 'Oncology Drug Supply 2026', state: 'Madhya Pradesh', division: 'Jabalpur', category: 'Drugs', status: 'Awaiting invoice', vendor: 'OncoCare Pharma', paymentDate: '—', value: '₹7.9 Cr – ₹8.5 Cr', gross: '—', ld: '—', netPayable: '—', mode: '—', utr: '—', dueDate: '—', date: '03-09-2026', remarks: 'Upstream stages incomplete.' },
     { id: 'PAY-2026-0072', invoiceId: 'INV-2026-0072', poId: 'PO-2026-0072', tenderId: 'TND-2026-MP-0072', title: 'Surgical Instruments Kit', state: 'Madhya Pradesh', division: 'Gwalior', category: 'Equipment', status: 'Awaiting invoice', vendor: 'Apex Surgical India', paymentDate: '—', value: '₹41 L – ₹48 L', gross: '—', ld: '—', netPayable: '—', mode: '—', utr: '—', dueDate: '—', date: '01-09-2026', remarks: 'Awaiting contract / GRN / invoice.' },
     { id: 'PAY-2026-0085', invoiceId: 'INV-2026-0085', poId: 'PO-2026-0085', tenderId: 'TND-2026-MP-0085', title: 'Ambulance Fleet Maintenance', state: 'Madhya Pradesh', division: 'Rewa', category: 'Others', status: 'Awaiting invoice', vendor: 'MediTrans Logistics', paymentDate: '—', value: '₹29 L – ₹34 L', gross: '—', ld: '—', netPayable: '—', mode: '—', utr: '—', dueDate: '—', date: '28-08-2026', remarks: 'No payment queue entry yet.' },
@@ -1088,12 +1088,12 @@ const VENDOR_WORKFLOW = [
 ];
 
 const VENDORS = [
-  { id: 'VND-MP-000123', name: 'MediSupply India Pvt Ltd', quality: 92, leadTime: 88, cost: 85, regulatory: 95, satisfaction: 90, overall: 90.1, status: 'Preferred', category: 'Drugs' },
-  { id: 'VND-MP-000456', name: 'HealthTech Solutions', quality: 85, leadTime: 78, cost: 92, regulatory: 88, satisfaction: 82, overall: 84.8, status: 'Active', category: 'Equipment' },
-  { id: 'VND-MP-000789', name: 'PharmaCare Distributors', quality: 78, leadTime: 72, cost: 88, regulatory: 80, satisfaction: 75, overall: 78.6, status: 'Active', category: 'Drugs' },
-  { id: 'VND-MP-001012', name: 'BioMed Instruments', quality: 95, leadTime: 82, cost: 75, regulatory: 98, satisfaction: 88, overall: 88.4, status: 'Preferred', category: 'Equipment' },
-  { id: 'VND-MP-001345', name: 'CarePlus Consumables', quality: 70, leadTime: 65, cost: 90, regulatory: 72, satisfaction: 68, overall: 72.1, status: 'Watch', category: 'Consumables' },
-  { id: 'VND-MP-001678', name: 'Digital Health IT', quality: 88, leadTime: 90, cost: 80, regulatory: 92, satisfaction: 85, overall: 86.8, status: 'Active', category: 'Services' }
+  { id: 'VND-MP-000123', name: 'MediSupply India Pvt Ltd', testingLabs: 92, communication: 90, timelyDelivery: 88, packaging: 86, pricing: 85, blacklisting: 98, overall: 90.3, status: 'Preferred', category: 'Drugs' },
+  { id: 'VND-MP-000456', name: 'HealthTech Solutions', testingLabs: 85, communication: 82, timelyDelivery: 78, packaging: 84, pricing: 92, blacklisting: 90, overall: 84.2, status: 'Active', category: 'Equipment' },
+  { id: 'VND-MP-000789', name: 'PharmaCare Distributors', testingLabs: 78, communication: 75, timelyDelivery: 72, packaging: 74, pricing: 88, blacklisting: 82, overall: 77.3, status: 'Active', category: 'Drugs' },
+  { id: 'VND-MP-001012', name: 'BioMed Instruments', testingLabs: 95, communication: 88, timelyDelivery: 82, packaging: 90, pricing: 75, blacklisting: 98, overall: 88.7, status: 'Preferred', category: 'Equipment' },
+  { id: 'VND-MP-001345', name: 'CarePlus Consumables', testingLabs: 70, communication: 68, timelyDelivery: 65, packaging: 72, pricing: 90, blacklisting: 60, overall: 69.2, status: 'Watch', category: 'Consumables' },
+  { id: 'VND-MP-001678', name: 'Digital Health IT', testingLabs: 88, communication: 85, timelyDelivery: 90, packaging: 84, pricing: 80, blacklisting: 92, overall: 87.5, status: 'Active', category: 'Services' }
 ];
 
 const ALERTS_GOV = [
@@ -1993,11 +1993,12 @@ const SLA_THREADS = [
 ];
 
 const PERF_METRICS = [
-  { key: 'quality', label: 'Quality', weight: 30, icon: 'fa-award', color: '#003D5D' },
-  { key: 'leadTime', label: 'Lead Time', weight: 20, icon: 'fa-clock', color: '#00897b' },
-  { key: 'cost', label: 'Cost', weight: 20, icon: 'fa-indian-rupee-sign', color: '#f57c00' },
-  { key: 'regulatory', label: 'Regulatory', weight: 20, icon: 'fa-shield-halved', color: '#7b1fa2' },
-  { key: 'satisfaction', label: 'User Satisfaction', weight: 10, icon: 'fa-face-smile', color: '#d32f2f' }
+  { key: 'testingLabs', label: 'Testing through Labs', weight: 25, icon: 'fa-flask', color: '#003D5D' },
+  { key: 'communication', label: 'Communication response', weight: 15, icon: 'fa-comments', color: '#1565c0' },
+  { key: 'timelyDelivery', label: 'Timely Delivery', weight: 25, icon: 'fa-truck-fast', color: '#00897b' },
+  { key: 'packaging', label: 'Packaging & supply', weight: 10, icon: 'fa-box', color: '#6d4c41' },
+  { key: 'pricing', label: 'Pricing', weight: 10, icon: 'fa-indian-rupee-sign', color: '#f57c00' },
+  { key: 'blacklisting', label: 'Blacklisting status', weight: 15, icon: 'fa-ban', color: '#c62828' }
 ];
 
 const CHART_DATA = {
@@ -2030,9 +2031,9 @@ const CHART_DATA = {
   /** Item-wise comparison mock (category items) */
   itemCompare: {
     labels: ['Paracetamol 500mg', 'CT Scanner', 'Hospital Linen', 'HMIS Module', 'IV Fluids'],
-    quality: [92, 88, 85, 90, 87],
-    leadTime: [86, 78, 91, 84, 80],
-    cost: [81, 75, 88, 79, 83]
+    testingLabs: [92, 88, 85, 90, 87],
+    timelyDelivery: [86, 78, 91, 84, 80],
+    pricing: [81, 75, 88, 79, 83]
   },
   /** Tender pipeline progress — processed / pending / delayed */
   tenderProgress: {
@@ -2075,11 +2076,12 @@ const ANALYTICS_FY_OPTIONS = [
 ];
 
 const SCORE_WEIGHTS = [
-  { label: 'Quality', weight: 30 },
-  { label: 'Lead Time', weight: 20 },
-  { label: 'Cost', weight: 20 },
-  { label: 'Regulatory', weight: 20 },
-  { label: 'User Satisfaction', weight: 10 }
+  { label: 'Testing through Labs', weight: 25 },
+  { label: 'Communication response', weight: 15 },
+  { label: 'Timely Delivery', weight: 25 },
+  { label: 'Packaging & supply', weight: 10 },
+  { label: 'Pricing', weight: 10 },
+  { label: 'Blacklisting status', weight: 15 }
 ];
 
 /** Item / drug types by category — used in analytics drill-downs */
