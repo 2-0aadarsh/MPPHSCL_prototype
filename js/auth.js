@@ -61,6 +61,8 @@ let authPending = null;
 let authSession = null;
 let otpResendTimer = null;
 let otpResendSeconds = 0;
+let landingHeroIndex = 0;
+let landingHeroTimer = null;
 
 function roleLabelToKey(label) {
   if (label === 'Vendor' || label === 'Vendor / Bidder') return 'vendor';
