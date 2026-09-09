@@ -3698,7 +3698,7 @@ function renderTopbar() {
     'vendor-matrix': ['Vendor Performance Matrix', 'Weighted scoring and vendor ranking'],
     reports: currentRole === 'vendor'
       ? ['My Reports', 'Bid participation, contract execution & downloadable analytics']
-      : ['Reports & Analytics', 'Cross-module procurement intelligence — charts, tables and downloadable PDF/Excel packs'],
+      : ['Reports & Analytics', 'Cross-module procurement intelligence — charts, tables and per-widget Excel/PDF downloads'],
     settings: ['Settings & Branding', 'Organization name, logo, and configuration'],
     registration: ['Profile & KYC', 'NIC-synced identity — document validation only'],
     tenders: ['Tender Discovery', getTenderPageSubtitle()],
@@ -13738,10 +13738,6 @@ function renderGovReports() {
         <p class="report-toolbar-lead">Resource Manager analytics · <strong>${ds.category === 'All' ? 'All categories' : ds.category}</strong></p>
         <p class="report-toolbar-meta">Generated ${formatDateDMY(APP_TODAY)} · ${ctx} · DoPHFW, GoMP</p>
       </div>
-      <div class="report-toolbar-actions">
-        <button type="button" class="btn btn-outline" onclick="downloadGovReportPack('excel')"><i class="fa-solid fa-file-excel"></i> Excel Pack</button>
-        <button type="button" class="btn btn-primary" onclick="downloadGovReportPack('pdf')"><i class="fa-solid fa-file-pdf"></i> PDF Pack</button>
-      </div>
     </div>
 
     ${renderAnalyticsFilterBar({ showCompare: false })}
@@ -13784,24 +13780,26 @@ function renderGovReports() {
           <h3>Procurement Lifecycle &amp; Financial Analytics</h3>
           <p>Combines Analytics Dashboard and Need Identification to Pay — spend, savings, workflow stage status, and district-wise outlay.</p>
         </div>
-        <div class="report-section-actions">
-          <button type="button" class="btn btn-outline btn-sm" onclick="downloadGovReport('lifecycle','excel')"><i class="fa-solid fa-file-excel"></i> Excel</button>
-          <button type="button" class="btn btn-outline btn-sm" onclick="downloadGovReport('lifecycle','pdf')"><i class="fa-solid fa-file-pdf"></i> PDF</button>
-        </div>
       </div>
       <div class="chart-grid">
         <div class="chart-card">
           <div class="chart-header">
-            <h3><i class="fa-solid fa-chart-column"></i> Spend Trends (Procurement)</h3>
-            <span class="chart-subtitle" data-chart-sub="spend">${getChartSubtitle('spend')}</span>
+            <div>
+              <h3><i class="fa-solid fa-chart-column"></i> Spend Trends (Procurement)</h3>
+              <span class="chart-subtitle" data-chart-sub="spend">${getChartSubtitle('spend')}</span>
+            </div>
+            ${govWidgetDownloadBtns('spend')}
           </div>
           <p class="chart-help">Unit: <strong>₹ Crore</strong> — money spent through awarded tenders / purchase orders.</p>
           <div class="chart-container"><canvas id="chartSpend"></canvas></div>
         </div>
         <div class="chart-card">
           <div class="chart-header">
-            <h3><i class="fa-solid fa-piggy-bank"></i> Savings Realization (₹ Cr)</h3>
-            <span class="chart-subtitle" data-chart-sub="savings">${getChartSubtitle('savings')}</span>
+            <div>
+              <h3><i class="fa-solid fa-piggy-bank"></i> Savings Realization (₹ Cr)</h3>
+              <span class="chart-subtitle" data-chart-sub="savings">${getChartSubtitle('savings')}</span>
+            </div>
+            ${govWidgetDownloadBtns('savings')}
           </div>
           <p class="chart-help">Unit: <strong>₹ Crore</strong> — savings vs estimate through rate contracts and L1 competition.</p>
           <div class="chart-container"><canvas id="chartSavings"></canvas></div>
@@ -13809,34 +13807,49 @@ function renderGovReports() {
       </div>
       <div class="chart-grid mt-2">
         <div class="chart-card full">
-          <div class="chart-header"><h3><i class="fa-solid fa-arrows-rotate"></i> Procurement Lifecycle Stage Status</h3></div>
+          <div class="chart-header">
+            <h3><i class="fa-solid fa-arrows-rotate"></i> Procurement Lifecycle Stage Status</h3>
+            ${govWidgetDownloadBtns('lifecycle-status')}
+          </div>
           <p class="chart-help">13-stage Need Identification to Pay workflow — completed, active, and pending stages.</p>
           <div class="chart-container chart-container--tall"><canvas id="chartGovWorkflow"></canvas></div>
         </div>
       </div>
-      <div class="data-table-wrap mt-2">
-        <table class="data-table" id="tblGovWorkflow">
-          <thead><tr><th>Stage</th><th>Step</th><th>Description</th><th>Status</th></tr></thead>
-          <tbody>
-            ${ds.workflow.map(s => `<tr>
-              <td><strong>${s.id}</strong></td>
-              <td>${s.name}</td>
-              <td>${s.desc}</td>
-              <td><span class="badge badge-${s.status === 'done' ? 'success' : s.status === 'active' ? 'warning' : 'muted'}">${s.status === 'done' ? 'Completed' : s.status === 'active' ? 'In Progress' : 'Pending'}</span></td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
+      <div class="report-table-block mt-2">
+        <div class="table-header">
+          <h3>Lifecycle stages</h3>
+          ${govWidgetDownloadBtns('workflow-stages')}
+        </div>
+        <div class="data-table-wrap report-table-wrap">
+          <table class="data-table" id="tblGovWorkflow">
+            <thead><tr><th>Stage</th><th>Step</th><th>Description</th><th>Status</th></tr></thead>
+            <tbody>
+              ${ds.workflow.map(s => `<tr>
+                <td><strong>${s.id}</strong></td>
+                <td>${s.name}</td>
+                <td>${s.desc}</td>
+                <td><span class="badge badge-${s.status === 'done' ? 'success' : s.status === 'active' ? 'warning' : 'muted'}">${s.status === 'done' ? 'Completed' : s.status === 'active' ? 'In Progress' : 'Pending'}</span></td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
       </div>
-      <div class="data-table-wrap mt-2">
-        <table class="data-table" id="tblDistrictSpend">
-          <thead><tr><th>District</th><th>Facility</th><th>Drugs (₹ Cr)</th><th>Equipment</th><th>Services</th><th>Consumables</th><th>Others</th></tr></thead>
-          <tbody>
-            ${ds.districtSpend.length ? ds.districtSpend.map(d => `<tr>
-              <td><strong>${d.district}</strong></td><td>${d.facility}</td>
-              <td>${d.drugs}</td><td>${d.equipment}</td><td>${d.services}</td><td>${d.consumables}</td><td>${d.others}</td>
-            </tr>`).join('') : emptyTableRow(7)}
-          </tbody>
-        </table>
+      <div class="report-table-block mt-2">
+        <div class="table-header">
+          <h3>District-wise spend</h3>
+          ${govWidgetDownloadBtns('district-spend')}
+        </div>
+        <div class="data-table-wrap report-table-wrap">
+          <table class="data-table" id="tblDistrictSpend">
+            <thead><tr><th>District</th><th>Facility</th><th>Drugs (₹ Cr)</th><th>Equipment</th><th>Services</th><th>Consumables</th><th>Others</th></tr></thead>
+            <tbody>
+              ${ds.districtSpend.length ? ds.districtSpend.map(d => `<tr>
+                <td><strong>${d.district}</strong></td><td>${d.facility}</td>
+                <td>${d.drugs}</td><td>${d.equipment}</td><td>${d.services}</td><td>${d.consumables}</td><td>${d.others}</td>
+              </tr>`).join('') : emptyTableRow(7)}
+            </tbody>
+          </table>
+        </div>
       </div>
       <p class="report-footnote"><i class="fa-solid fa-circle-info"></i> Savings rate for selected period: <strong id="reportSaveRate">${ds.totals.rate}%</strong> · Workflow: <strong>${ds.workflowActive}</strong> active, <strong>${ds.workflowPending}</strong> pending</p>
     </section>
@@ -13849,72 +13862,101 @@ function renderGovReports() {
           <h3>Vendor Onboarding &amp; Sourcing Pipeline</h3>
           <p>Combines Vendor Registration and Sourcing &amp; Award — KYC queue, tender pipeline, pending sanctions, and payment delays.</p>
         </div>
-        <div class="report-section-actions">
-          <button type="button" class="btn btn-outline btn-sm" onclick="downloadGovReport('sourcing','excel')"><i class="fa-solid fa-file-excel"></i> Excel</button>
-          <button type="button" class="btn btn-outline btn-sm" onclick="downloadGovReport('sourcing','pdf')"><i class="fa-solid fa-file-pdf"></i> PDF</button>
-        </div>
       </div>
       <div class="chart-grid">
         <div class="chart-card">
-          <div class="chart-header"><h3>Tender Pipeline by Status</h3></div>
+          <div class="chart-header">
+            <h3>Tender Pipeline by Status</h3>
+            ${govWidgetDownloadBtns('tender-pipeline')}
+          </div>
           <div class="chart-container"><canvas id="chartGovTenderPipeline"></canvas></div>
         </div>
         <div class="chart-card">
-          <div class="chart-header"><h3>Pending Approvals by Stage</h3></div>
+          <div class="chart-header">
+            <h3>Pending Approvals by Stage</h3>
+            ${govWidgetDownloadBtns('approval-stages')}
+          </div>
           <div class="chart-container"><canvas id="chartGovApprovalStages"></canvas></div>
         </div>
       </div>
       <div class="chart-grid mt-2">
         <div class="chart-card full">
-          <div class="chart-header"><h3>Payment Delays by Days Overdue</h3></div>
+          <div class="chart-header">
+            <h3>Payment Delays by Days Overdue</h3>
+            ${govWidgetDownloadBtns('payment-delays-chart')}
+          </div>
           <div class="chart-container chart-container--tall"><canvas id="chartGovPaymentDelays"></canvas></div>
         </div>
       </div>
-      <div class="data-table-wrap mt-2">
-        <table class="data-table" id="tblGovRegistrations">
-          <thead><tr><th>Registration ID</th><th>Vendor</th><th>Category</th><th>KYC</th><th>Documents</th><th>Submitted</th></tr></thead>
-          <tbody>
-            ${ds.registrations.length ? ds.registrations.map(r => `<tr>
-              <td><strong>${r.id}</strong></td><td>${r.name}</td><td>${r.category}</td>
-              <td><span class="badge badge-${kycBadgeClass(r.kyc)}">${r.kyc}</span></td>
-              <td>${r.documents}</td><td>${formatDateDMY(r.submitted)}</td>
-            </tr>`).join('') : emptyTableRow(6)}
-          </tbody>
-        </table>
+      <div class="report-table-block mt-2">
+        <div class="table-header">
+          <h3>Vendor registrations</h3>
+          ${govWidgetDownloadBtns('registrations')}
+        </div>
+        <div class="data-table-wrap report-table-wrap">
+          <table class="data-table" id="tblGovRegistrations">
+            <thead><tr><th>Registration ID</th><th>Vendor</th><th>Category</th><th>KYC</th><th>Documents</th><th>Submitted</th></tr></thead>
+            <tbody>
+              ${ds.registrations.length ? ds.registrations.map(r => `<tr>
+                <td><strong>${r.id}</strong></td><td>${r.name}</td><td>${r.category}</td>
+                <td><span class="badge badge-${kycBadgeClass(r.kyc)}">${r.kyc}</span></td>
+                <td>${r.documents}</td><td>${formatDateDMY(r.submitted)}</td>
+              </tr>`).join('') : emptyTableRow(6)}
+            </tbody>
+          </table>
+        </div>
       </div>
-      <div class="data-table-wrap mt-2">
-        <table class="data-table" id="tblGovTenders">
-          <thead><tr><th>Tender ID</th><th>Title</th><th>Category</th><th>Value</th><th>Bids</th><th>Deadline</th><th>Status</th></tr></thead>
-          <tbody>
-            ${ds.tenders.length ? ds.tenders.map(t => `<tr>
-              <td><strong>${t.id}</strong></td><td>${t.title}</td><td>${t.category}</td><td>${t.value}</td>
-              <td>${t.bids}</td><td>${formatDateDMY(t.deadline)}</td>
-              <td><span class="badge badge-${tenderBadgeClass(t.status)}">${t.status}</span></td>
-            </tr>`).join('') : emptyTableRow(7)}
-          </tbody>
-        </table>
+      <div class="report-table-block mt-2">
+        <div class="table-header">
+          <h3>Tenders</h3>
+          ${govWidgetDownloadBtns('tenders')}
+        </div>
+        <div class="data-table-wrap report-table-wrap">
+          <table class="data-table" id="tblGovTenders">
+            <thead><tr><th>Tender ID</th><th>Title</th><th>Category</th><th>Value</th><th>Bids</th><th>Deadline</th><th>Status</th></tr></thead>
+            <tbody>
+              ${ds.tenders.length ? ds.tenders.map(t => `<tr>
+                <td><strong>${t.id}</strong></td><td>${t.title}</td><td>${t.category}</td><td>${t.value}</td>
+                <td>${t.bids}</td><td>${formatDateDMY(t.deadline)}</td>
+                <td><span class="badge badge-${tenderBadgeClass(t.status)}">${t.status}</span></td>
+              </tr>`).join('') : emptyTableRow(7)}
+            </tbody>
+          </table>
+        </div>
       </div>
-      <div class="data-table-wrap mt-2">
-        <table class="data-table" id="tblGovApprovals">
-          <thead><tr><th>PR ID</th><th>Title</th><th>Category</th><th>Stage</th><th>Amount</th><th>Age</th><th>Owner</th></tr></thead>
-          <tbody>
-            ${ds.pendingApprovals.length ? ds.pendingApprovals.map(a => `<tr>
-              <td><strong>${a.id}</strong></td><td>${a.title}</td><td>${a.category}</td><td>${a.stage}</td>
-              <td>${a.amount}</td><td>${a.age}</td><td>${a.owner}</td>
-            </tr>`).join('') : emptyTableRow(7)}
-          </tbody>
-        </table>
+      <div class="report-table-block mt-2">
+        <div class="table-header">
+          <h3>Pending approvals</h3>
+          ${govWidgetDownloadBtns('approvals')}
+        </div>
+        <div class="data-table-wrap report-table-wrap">
+          <table class="data-table" id="tblGovApprovals">
+            <thead><tr><th>PR ID</th><th>Title</th><th>Category</th><th>Stage</th><th>Amount</th><th>Age</th><th>Owner</th></tr></thead>
+            <tbody>
+              ${ds.pendingApprovals.length ? ds.pendingApprovals.map(a => `<tr>
+                <td><strong>${a.id}</strong></td><td>${a.title}</td><td>${a.category}</td><td>${a.stage}</td>
+                <td>${a.amount}</td><td>${a.age}</td><td>${a.owner}</td>
+              </tr>`).join('') : emptyTableRow(7)}
+            </tbody>
+          </table>
+        </div>
       </div>
-      <div class="data-table-wrap mt-2">
-        <table class="data-table" id="tblGovPaymentDelays">
-          <thead><tr><th>Invoice</th><th>Vendor</th><th>Category</th><th>Amount</th><th>Days Overdue</th><th>Reason</th><th>Contract</th></tr></thead>
-          <tbody>
-            ${ds.paymentDelays.length ? ds.paymentDelays.map(p => `<tr>
-              <td><strong>${p.id}</strong></td><td>${p.vendor}</td><td>${p.category}</td><td>${p.amount}</td>
-              <td><span class="badge badge-danger">${p.daysOverdue} days</span></td><td>${p.reason}</td><td>${p.contractId}</td>
-            </tr>`).join('') : emptyTableRow(7)}
-          </tbody>
-        </table>
+      <div class="report-table-block mt-2">
+        <div class="table-header">
+          <h3>Payment delays</h3>
+          ${govWidgetDownloadBtns('payment-delays')}
+        </div>
+        <div class="data-table-wrap report-table-wrap">
+          <table class="data-table" id="tblGovPaymentDelays">
+            <thead><tr><th>Invoice</th><th>Vendor</th><th>Category</th><th>Amount</th><th>Days Overdue</th><th>Reason</th><th>Contract</th></tr></thead>
+            <tbody>
+              ${ds.paymentDelays.length ? ds.paymentDelays.map(p => `<tr>
+                <td><strong>${p.id}</strong></td><td>${p.vendor}</td><td>${p.category}</td><td>${p.amount}</td>
+                <td><span class="badge badge-danger">${p.daysOverdue} days</span></td><td>${p.reason}</td><td>${p.contractId}</td>
+              </tr>`).join('') : emptyTableRow(7)}
+            </tbody>
+          </table>
+        </div>
       </div>
       <p class="report-footnote"><i class="fa-solid fa-circle-info"></i> Sourcing action queue: <strong>${ds.actions.open}</strong> open tenders · <strong>${ds.actions.pending}</strong> pending approvals · <strong>${ds.actions.delays}</strong> payment delays</p>
     </section>
@@ -13927,66 +13969,89 @@ function renderGovReports() {
           <h3>Operations, SLA &amp; Vendor Performance</h3>
           <p>Combines Alerts &amp; Work Queue, SLA Communication, and Vendor Performance Matrix — escalations, alerts, and vendor scorecard.</p>
         </div>
-        <div class="report-section-actions">
-          <button type="button" class="btn btn-outline btn-sm" onclick="downloadGovReport('operations','excel')"><i class="fa-solid fa-file-excel"></i> Excel</button>
-          <button type="button" class="btn btn-outline btn-sm" onclick="downloadGovReport('operations','pdf')"><i class="fa-solid fa-file-pdf"></i> PDF</button>
-        </div>
       </div>
       <div class="chart-grid">
         <div class="chart-card">
-          <div class="chart-header"><h3>Work Queue by Category</h3></div>
+          <div class="chart-header">
+            <h3>Work Queue by Category</h3>
+            ${govWidgetDownloadBtns('work-queue-chart')}
+          </div>
           <div class="chart-container"><canvas id="chartGovWorkQueue"></canvas></div>
         </div>
         <div class="chart-card">
-          <div class="chart-header"><h3>SLA Thread Status</h3></div>
+          <div class="chart-header">
+            <h3>SLA Thread Status</h3>
+            ${govWidgetDownloadBtns('sla-status')}
+          </div>
           <div class="chart-container"><canvas id="chartGovSlaStatus"></canvas></div>
         </div>
       </div>
       <div class="chart-grid mt-2">
         <div class="chart-card full">
-          <div class="chart-header"><h3>Vendor Performance Score Comparison</h3></div>
+          <div class="chart-header">
+            <h3>Vendor Performance Score Comparison</h3>
+            ${govWidgetDownloadBtns('vendor-scores')}
+          </div>
           <p class="chart-help">Weighted overall score (0–100) across registered vendors in the selected category filter.</p>
           <div class="chart-container chart-container--tall"><canvas id="chartGovVendorScores"></canvas></div>
         </div>
       </div>
-      <div class="data-table-wrap mt-2">
-        <table class="data-table" id="tblGovWorkQueue">
-          <thead><tr><th>Alert</th><th>Category</th><th>Severity</th><th>Owner</th><th>Timeline</th><th>Detail</th></tr></thead>
-          <tbody>
-            ${ds.workQueue.length ? ds.workQueue.map(w => `<tr>
-              <td><strong>${w.title}</strong></td><td>${w.category}</td>
-              <td><span class="badge badge-${w.severity === 'high' ? 'danger' : w.severity === 'medium' ? 'warning' : 'info'}">${w.severity}</span></td>
-              <td>${w.owner}</td><td>${w.timeline}</td><td>${w.detail}</td>
-            </tr>`).join('') : emptyTableRow(6)}
-          </tbody>
-        </table>
+      <div class="report-table-block mt-2">
+        <div class="table-header">
+          <h3>Work queue</h3>
+          ${govWidgetDownloadBtns('work-queue')}
+        </div>
+        <div class="data-table-wrap report-table-wrap">
+          <table class="data-table" id="tblGovWorkQueue">
+            <thead><tr><th>Alert</th><th>Category</th><th>Severity</th><th>Owner</th><th>Timeline</th><th>Detail</th></tr></thead>
+            <tbody>
+              ${ds.workQueue.length ? ds.workQueue.map(w => `<tr>
+                <td><strong>${w.title}</strong></td><td>${w.category}</td>
+                <td><span class="badge badge-${w.severity === 'high' ? 'danger' : w.severity === 'medium' ? 'warning' : 'info'}">${w.severity}</span></td>
+                <td>${w.owner}</td><td>${w.timeline}</td><td>${w.detail}</td>
+              </tr>`).join('') : emptyTableRow(6)}
+            </tbody>
+          </table>
+        </div>
       </div>
-      <div class="data-table-wrap mt-2">
-        <table class="data-table" id="tblGovSlaThreads">
-          <thead><tr><th>Thread ID</th><th>Subject</th><th>Contract</th><th>Level</th><th>Priority</th><th>Status</th><th>Last Update</th></tr></thead>
-          <tbody>
-            ${ds.slaThreads.map(t => `<tr>
-              <td><strong>${t.id}</strong></td><td>${t.subject}</td><td>${t.contractId}</td>
-              <td>L${t.level}</td>
-              <td><span class="badge badge-${t.priority === 'High' ? 'danger' : t.priority === 'Medium' ? 'warning' : 'info'}">${t.priority}</span></td>
-              <td><span class="badge badge-${t.status === 'Resolved' ? 'success' : t.status === 'Open' ? 'danger' : 'warning'}">${t.status}</span></td>
-              <td>${t.lastUpdate}</td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
+      <div class="report-table-block mt-2">
+        <div class="table-header">
+          <h3>SLA threads</h3>
+          ${govWidgetDownloadBtns('sla-threads')}
+        </div>
+        <div class="data-table-wrap report-table-wrap">
+          <table class="data-table" id="tblGovSlaThreads">
+            <thead><tr><th>Thread ID</th><th>Subject</th><th>Contract</th><th>Level</th><th>Priority</th><th>Status</th><th>Last Update</th></tr></thead>
+            <tbody>
+              ${ds.slaThreads.map(t => `<tr>
+                <td><strong>${t.id}</strong></td><td>${t.subject}</td><td>${t.contractId}</td>
+                <td>L${t.level}</td>
+                <td><span class="badge badge-${t.priority === 'High' ? 'danger' : t.priority === 'Medium' ? 'warning' : 'info'}">${t.priority}</span></td>
+                <td><span class="badge badge-${t.status === 'Resolved' ? 'success' : t.status === 'Open' ? 'danger' : 'warning'}">${t.status}</span></td>
+                <td>${t.lastUpdate}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
       </div>
-      <div class="data-table-wrap mt-2">
-        <table class="data-table" id="tblGovVendors">
-          <thead><tr><th>Vendor ID</th><th>Name</th><th>Category</th>${PERF_METRICS.map(m => `<th>${m.label}</th>`).join('')}<th>Overall</th><th>Status</th></tr></thead>
-          <tbody>
-            ${ds.vendors.length ? ds.vendors.map(v => `<tr>
-              <td><strong>${v.id}</strong></td><td>${v.name}</td><td>${v.category}</td>
-              ${PERF_METRICS.map(m => `<td>${v[m.key] ?? '—'}</td>`).join('')}
-              <td><strong>${v.overall}</strong></td>
-              <td><span class="badge badge-${v.status === 'Preferred' ? 'success' : v.status === 'Watch' ? 'danger' : 'info'}">${v.status}</span></td>
-            </tr>`).join('') : emptyTableRow(3 + PERF_METRICS.length + 2)}
-          </tbody>
-        </table>
+      <div class="report-table-block mt-2">
+        <div class="table-header">
+          <h3>Vendor performance</h3>
+          ${govWidgetDownloadBtns('vendors')}
+        </div>
+        <div class="data-table-wrap report-table-wrap">
+          <table class="data-table" id="tblGovVendors">
+            <thead><tr><th>Vendor ID</th><th>Name</th><th>Category</th>${PERF_METRICS.map(m => `<th>${m.label}</th>`).join('')}<th>Overall</th><th>Status</th></tr></thead>
+            <tbody>
+              ${ds.vendors.length ? ds.vendors.map(v => `<tr>
+                <td><strong>${v.id}</strong></td><td>${v.name}</td><td>${v.category}</td>
+                ${PERF_METRICS.map(m => `<td>${v[m.key] ?? '—'}</td>`).join('')}
+                <td><strong>${v.overall}</strong></td>
+                <td><span class="badge badge-${v.status === 'Preferred' ? 'success' : v.status === 'Watch' ? 'danger' : 'info'}">${v.status}</span></td>
+              </tr>`).join('') : emptyTableRow(3 + PERF_METRICS.length + 2)}
+            </tbody>
+          </table>
+        </div>
       </div>
       <p class="report-footnote"><i class="fa-solid fa-circle-info"></i> Average vendor score in filter: <strong>${avgVendorScore}</strong> · Open SLA threads: <strong>${openSla}</strong> · Unread alerts: <strong>${unreadAlerts}</strong></p>
     </section>
@@ -14638,6 +14703,278 @@ function downloadVendorReportPack(format) {
         setTimeout(() => performVendorReportDownload(kind, format), i * (format === 'excel' ? 500 : 350));
       });
     }
+  });
+}
+
+function govWidgetDownloadBtns(widgetId) {
+  return `<div class="report-widget-actions">
+    <button type="button" class="btn btn-outline btn-sm" onclick="downloadGovWidget('${widgetId}','excel')" title="Download Excel"><i class="fa-solid fa-file-excel"></i> Excel</button>
+    <button type="button" class="btn btn-outline btn-sm" onclick="downloadGovWidget('${widgetId}','pdf')" title="Download PDF"><i class="fa-solid fa-file-pdf"></i> PDF</button>
+  </div>`;
+}
+
+function getGovChartSeriesRows(metricKey) {
+  const period = typeof getAnalyticsChartPeriod === 'function' ? getAnalyticsChartPeriod() : 'year';
+  const series = typeof resolveChartSeries === 'function'
+    ? resolveChartSeries(metricKey, period)
+    : { labels: [], data: [] };
+  const labels = series.labels || [];
+  const data = typeof scaleData === 'function'
+    ? scaleData(series.data || [], currentCategory)
+    : (series.data || []);
+  return labels.map((label, i) => [label, data[i] ?? 0]);
+}
+
+function buildGovWidgetSheet(widgetId) {
+  const ds = getGovReportDataset();
+  const meta = `Resource Manager · ${ds.category === 'All' ? 'All categories' : ds.category} · ${getAnalyticsContextLabel()}`;
+
+  if (widgetId === 'spend') {
+    return {
+      id: widgetId,
+      title: 'Spend Trends (Procurement)',
+      fileSlug: 'Spend_Trends',
+      headers: ['Period', 'Spend (₹ Cr)'],
+      rows: getGovChartSeriesRows('spend'),
+      meta
+    };
+  }
+  if (widgetId === 'savings') {
+    return {
+      id: widgetId,
+      title: 'Savings Realization',
+      fileSlug: 'Savings_Realization',
+      headers: ['Period', 'Savings (₹ Cr)'],
+      rows: getGovChartSeriesRows('savings'),
+      meta
+    };
+  }
+  if (widgetId === 'lifecycle-status') {
+    const byStatus = countByField(ds.workflow, s => (
+      s.status === 'done' ? 'Completed' : s.status === 'active' ? 'In Progress' : 'Pending'
+    ));
+    return {
+      id: widgetId,
+      title: 'Procurement Lifecycle Stage Status',
+      fileSlug: 'Lifecycle_Stage_Status',
+      headers: ['Status', 'Count'],
+      rows: Object.keys(byStatus).map(k => [k, byStatus[k]]),
+      detailHeaders: ['Stage', 'Step', 'Description', 'Status'],
+      detailRows: ds.workflow.map(s => [
+        s.id, s.name, s.desc,
+        s.status === 'done' ? 'Completed' : s.status === 'active' ? 'In Progress' : 'Pending'
+      ]),
+      meta
+    };
+  }
+  if (widgetId === 'workflow-stages') {
+    return {
+      id: widgetId,
+      title: 'Lifecycle stages',
+      fileSlug: 'Lifecycle_Stages',
+      headers: ['Stage', 'Step', 'Description', 'Status'],
+      rows: ds.workflow.map(s => [
+        s.id, s.name, s.desc,
+        s.status === 'done' ? 'Completed' : s.status === 'active' ? 'In Progress' : 'Pending'
+      ]),
+      meta
+    };
+  }
+  if (widgetId === 'district-spend') {
+    return {
+      id: widgetId,
+      title: 'District-wise spend',
+      fileSlug: 'District_Spend',
+      headers: ['District', 'Facility', 'Drugs (Cr)', 'Equipment', 'Services', 'Consumables', 'Others'],
+      rows: ds.districtSpend.map(d => [d.district, d.facility, d.drugs, d.equipment, d.services, d.consumables, d.others]),
+      meta
+    };
+  }
+  if (widgetId === 'tender-pipeline') {
+    const byStatus = countByField(ds.tenders, t => t.status);
+    return {
+      id: widgetId,
+      title: 'Tender Pipeline by Status',
+      fileSlug: 'Tender_Pipeline',
+      headers: ['Status', 'Count'],
+      rows: Object.keys(byStatus).map(k => [k, byStatus[k]]),
+      detailHeaders: ['Tender ID', 'Title', 'Category', 'Value', 'Bids', 'Deadline', 'Status'],
+      detailRows: ds.tenders.map(t => [t.id, t.title, t.category, t.value, t.bids, formatDateDMY(t.deadline), t.status]),
+      meta
+    };
+  }
+  if (widgetId === 'approval-stages') {
+    const byStage = countByField(ds.pendingApprovals, a => a.stage);
+    return {
+      id: widgetId,
+      title: 'Pending Approvals by Stage',
+      fileSlug: 'Pending_Approvals_By_Stage',
+      headers: ['Stage', 'Count'],
+      rows: Object.keys(byStage).map(k => [k, byStage[k]]),
+      detailHeaders: ['PR ID', 'Title', 'Category', 'Stage', 'Amount', 'Age', 'Owner'],
+      detailRows: ds.pendingApprovals.map(a => [a.id, a.title, a.category, a.stage, a.amount, a.age, a.owner]),
+      meta
+    };
+  }
+  if (widgetId === 'payment-delays-chart') {
+    const buckets = { '1–15 days': 0, '16–30 days': 0, '31–60 days': 0, '60+ days': 0 };
+    ds.paymentDelays.forEach(p => {
+      const d = Number(p.daysOverdue) || 0;
+      if (d <= 15) buckets['1–15 days'] += 1;
+      else if (d <= 30) buckets['16–30 days'] += 1;
+      else if (d <= 60) buckets['31–60 days'] += 1;
+      else buckets['60+ days'] += 1;
+    });
+    return {
+      id: widgetId,
+      title: 'Payment Delays by Days Overdue',
+      fileSlug: 'Payment_Delays_Chart',
+      headers: ['Bucket', 'Count'],
+      rows: Object.keys(buckets).map(k => [k, buckets[k]]),
+      detailHeaders: ['Invoice', 'Vendor', 'Category', 'Amount', 'Days Overdue', 'Reason', 'Contract'],
+      detailRows: ds.paymentDelays.map(p => [p.id, p.vendor, p.category, p.amount, p.daysOverdue, p.reason, p.contractId]),
+      meta
+    };
+  }
+  if (widgetId === 'registrations') {
+    return {
+      id: widgetId,
+      title: 'Vendor registrations',
+      fileSlug: 'Vendor_Registrations',
+      headers: ['Registration ID', 'Vendor', 'Category', 'KYC', 'Documents', 'Submitted'],
+      rows: ds.registrations.map(r => [r.id, r.name, r.category, r.kyc, r.documents, formatDateDMY(r.submitted)]),
+      meta
+    };
+  }
+  if (widgetId === 'tenders') {
+    return {
+      id: widgetId,
+      title: 'Tenders',
+      fileSlug: 'Tenders',
+      headers: ['Tender ID', 'Title', 'Category', 'Value', 'Bids', 'Deadline', 'Status'],
+      rows: ds.tenders.map(t => [t.id, t.title, t.category, t.value, t.bids, formatDateDMY(t.deadline), t.status]),
+      meta
+    };
+  }
+  if (widgetId === 'approvals') {
+    return {
+      id: widgetId,
+      title: 'Pending approvals',
+      fileSlug: 'Pending_Approvals',
+      headers: ['PR ID', 'Title', 'Category', 'Stage', 'Amount', 'Age', 'Owner'],
+      rows: ds.pendingApprovals.map(a => [a.id, a.title, a.category, a.stage, a.amount, a.age, a.owner]),
+      meta
+    };
+  }
+  if (widgetId === 'payment-delays') {
+    return {
+      id: widgetId,
+      title: 'Payment delays',
+      fileSlug: 'Payment_Delays',
+      headers: ['Invoice', 'Vendor', 'Category', 'Amount', 'Days Overdue', 'Reason', 'Contract'],
+      rows: ds.paymentDelays.map(p => [p.id, p.vendor, p.category, p.amount, p.daysOverdue, p.reason, p.contractId]),
+      meta
+    };
+  }
+  if (widgetId === 'work-queue-chart') {
+    const byCat = countByField(ds.workQueue, w => w.category);
+    return {
+      id: widgetId,
+      title: 'Work Queue by Category',
+      fileSlug: 'Work_Queue_By_Category',
+      headers: ['Category', 'Count'],
+      rows: Object.keys(byCat).map(k => [k, byCat[k]]),
+      detailHeaders: ['Alert', 'Category', 'Severity', 'Owner', 'Timeline', 'Detail'],
+      detailRows: ds.workQueue.map(w => [w.title, w.category, w.severity, w.owner, w.timeline, w.detail]),
+      meta
+    };
+  }
+  if (widgetId === 'sla-status') {
+    const byStatus = countByField(ds.slaThreads, t => t.status);
+    return {
+      id: widgetId,
+      title: 'SLA Thread Status',
+      fileSlug: 'SLA_Thread_Status',
+      headers: ['Status', 'Count'],
+      rows: Object.keys(byStatus).map(k => [k, byStatus[k]]),
+      detailHeaders: ['Thread ID', 'Subject', 'Contract', 'Level', 'Priority', 'Status', 'Last Update'],
+      detailRows: ds.slaThreads.map(t => [t.id, t.subject, t.contractId, `L${t.level}`, t.priority, t.status, t.lastUpdate]),
+      meta
+    };
+  }
+  if (widgetId === 'vendor-scores') {
+    return {
+      id: widgetId,
+      title: 'Vendor Performance Score Comparison',
+      fileSlug: 'Vendor_Score_Comparison',
+      headers: ['Vendor ID', 'Name', 'Category', 'Overall'],
+      rows: ds.vendors.map(v => [v.id, v.name, v.category, v.overall]),
+      detailHeaders: ['Vendor ID', 'Name', 'Category', ...PERF_METRICS.map(m => m.label), 'Overall', 'Status'],
+      detailRows: ds.vendors.map(v => [v.id, v.name, v.category, ...PERF_METRICS.map(m => v[m.key]), v.overall, v.status]),
+      meta
+    };
+  }
+  if (widgetId === 'work-queue') {
+    return {
+      id: widgetId,
+      title: 'Work queue',
+      fileSlug: 'Work_Queue',
+      headers: ['Alert', 'Category', 'Severity', 'Owner', 'Timeline', 'Detail'],
+      rows: ds.workQueue.map(w => [w.title, w.category, w.severity, w.owner, w.timeline, w.detail]),
+      meta
+    };
+  }
+  if (widgetId === 'sla-threads') {
+    return {
+      id: widgetId,
+      title: 'SLA threads',
+      fileSlug: 'SLA_Threads',
+      headers: ['Thread ID', 'Subject', 'Contract', 'Level', 'Priority', 'Status', 'Last Update'],
+      rows: ds.slaThreads.map(t => [t.id, t.subject, t.contractId, `L${t.level}`, t.priority, t.status, t.lastUpdate]),
+      meta
+    };
+  }
+  if (widgetId === 'vendors') {
+    return {
+      id: widgetId,
+      title: 'Vendor performance',
+      fileSlug: 'Vendor_Performance',
+      headers: ['Vendor ID', 'Name', 'Category', ...PERF_METRICS.map(m => m.label), 'Overall', 'Status'],
+      rows: ds.vendors.map(v => [v.id, v.name, v.category, ...PERF_METRICS.map(m => v[m.key]), v.overall, v.status]),
+      meta
+    };
+  }
+  return buildGovWidgetSheet('tenders');
+}
+
+function performGovWidgetDownload(widgetId, format) {
+  const sheet = buildGovWidgetSheet(widgetId);
+  const stamp = APP_TODAY.replace(/-/g, '');
+  const base = `MPHP_GOV_${sheet.fileSlug}_${stamp}`;
+  if (format === 'excel') {
+    downloadCsv(`${base}.csv`, sheet.headers, sheet.rows);
+    if (sheet.detailHeaders && sheet.detailRows?.length) {
+      setTimeout(() => {
+        downloadCsv(`${base}_details.csv`, sheet.detailHeaders, sheet.detailRows);
+      }, 220);
+    }
+    return;
+  }
+  downloadBlobFile(buildSimplePdfBlob(vendorSheetToPdfLines(sheet)), `${base}.pdf`);
+}
+
+function downloadGovWidget(widgetId, format) {
+  const sheet = buildGovWidgetSheet(widgetId);
+  confirmDocumentDownload({
+    title: 'Confirm download',
+    docLabel: sheet.title,
+    formatLabel: format === 'excel' ? 'Excel (CSV)' : 'PDF',
+    fileHint: format === 'excel'
+      ? (sheet.detailRows?.length
+        ? `Summary + ${sheet.detailRows.length} detail row(s) as CSV`
+        : `${sheet.rows.length} row(s) as Excel-compatible CSV`)
+      : `PDF with ${sheet.title} data only`,
+    execute: () => performGovWidgetDownload(widgetId, format)
   });
 }
 
